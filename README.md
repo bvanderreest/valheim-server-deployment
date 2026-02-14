@@ -3,9 +3,10 @@
 A resilient, production-ready Bash management script for running a
 **Valheim Dedicated Server** on Linux.
 
-This script provides clean lifecycle management, SteamCMD updates,
+This project provides clean lifecycle management, SteamCMD updates,
 automatic world backups, crash recovery, and configurable gameplay
-modifiers --- all in a single, easy-to-use `.sh` file.
+modifiers --- split across three modular `.sh` files for clean separation
+of configuration, helpers, and commands.
 
 ------------------------------------------------------------------------
 
@@ -66,32 +67,49 @@ Inside SteamCMD:
 
 # ⚙️ Setup This Manager Script
 
-1.  Copy `valheim-server-manager.sh` to your server
+## 📂 File Structure
 
-2.  Edit configuration section at top:
+This project consists of three modular files:
 
-    SERVER_NAME="Your Server Name" WORLD_NAME="YourWorld"
+- **config.sh** — All configuration variables (server name, ports, paths, modifiers, backup settings)
+- **helpers.sh** — Reusable helper functions (ensure_paths, build_args, is_running, guard_world)
+- **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
+
+### Benefits of This Architecture
+- **Easy Configuration** — Update settings in `config.sh` without touching script logic
+- **Reusable Helpers** — Functions in `helpers.sh` can be sourced by other scripts if needed
+- **Clean Separation** — Clear organization of concerns (config, utilities, commands)
+- **Maintainable** — Each file has a single, clear responsibility
+
+## 📦 Deployment
+
+1.  Copy all three files to your server:
+
+        config.sh
+        helpers.sh
+        valheim-server-manager.sh
+
+3.  Edit `config.sh` to set your server parameters:
+
+    SERVER_NAME="Your Server Name"
+    WORLD_NAME="YourWorld"
     PASSWORD="YourPassword"
 
 Password must: - Be at least 5 characters - Not match or contain world
 name
 
-------------------------------------------------------------------------
-
 ## Important Paths
 
-Adjust as needed:
+All paths are configured in `config.sh`. Adjust as needed:
 
     SERVER_DIR="/path/to/valheim"
     SAVEDIR="/srv/valheim/worlds"
     LOG_DIR="/srv/valheim/logs"
     BACKUP_DIR="/srv/valheim/backups"
 
-------------------------------------------------------------------------
-
 ## Make Executable
 
-    chmod +x valheim-server-manager.sh
+    chmod +x valheim-server-manager.sh config.sh helpers.sh
 
 ------------------------------------------------------------------------
 
@@ -109,7 +127,7 @@ Adjust as needed:
 
 # 🔄 Automatic Updates
 
-If enabled in config:
+If enabled in `config.sh`:
 
     USE_STEAMCMD_UPDATE=true
 
@@ -150,7 +168,7 @@ shutdowns
 
 # 🌍 Crossplay Support
 
-Enable in config:
+Enable in `config.sh`:
 
     CROSSPLAY=true
 
