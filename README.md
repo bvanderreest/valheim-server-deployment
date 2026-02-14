@@ -5,7 +5,7 @@ A resilient, production-ready Bash management script for running a
 
 This project provides clean lifecycle management, SteamCMD updates,
 automatic world backups, crash recovery, and configurable gameplay
-modifiers --- split across three modular `.sh` files for clean separation
+modifiers --- split across four modular files for clean separation
 of configuration, helpers, and commands.
 
 ------------------------------------------------------------------------
