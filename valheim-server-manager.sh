@@ -7,7 +7,7 @@ set -eo pipefail
 
 # Source configuration and helpers
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/config.sh"
+source "${SCRIPT_DIR}/config.conf"
 source "${SCRIPT_DIR}/helpers.sh"
 
 ########################################

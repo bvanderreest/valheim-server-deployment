@@ -69,38 +69,48 @@ Inside SteamCMD:
 
 ## 📂 File Structure
 
-This project consists of three modular files:
+This project consists of four modular files:
 
-- **config.sh** — All configuration variables (server name, ports, paths, modifiers, backup settings)
+- **config.conf** — Core configuration (server name, ports, paths, backup, SteamCMD settings)
+- **modifiers.conf** — Game modifiers and presets (easily customizable gameplay rules)
 - **helpers.sh** — Reusable helper functions (ensure_paths, build_args, is_running, guard_world)
 - **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
 
 ### Benefits of This Architecture
-- **Easy Configuration** — Update settings in `config.sh` without touching script logic
+- **Easy Configuration** — Update settings in `config.sh` or `modifiers.conf` without touching script logic
+- **Focused Files** — Game modifiers separated for easy experimentation and version control
 - **Reusable Helpers** — Functions in `helpers.sh` can be sourced by other scripts if needed
-- **Clean Separation** — Clear organization of concerns (config, utilities, commands)
+- **Clean Separation** — Clear organization of concerns (config, modifiers, utilities, commands)
 - **Maintainable** — Each file has a single, clear responsibility
 
 ## 📦 Deployment
 
-1.  Copy all three files to your server:
+1.  Copy all four files to your server:
 
-        config.sh
+        config.conf
+        modifiers.conf
         helpers.sh
         valheim-server-manager.sh
 
-3.  Edit `config.sh` to set your server parameters:
+2.  Customize `config.conf` for your server setup:
 
     SERVER_NAME="Your Server Name"
     WORLD_NAME="YourWorld"
     PASSWORD="YourPassword"
 
-Password must: - Be at least 5 characters - Not match or contain world
-name
+    **Password Requirements:**
+    - Minimum 5 characters
+    - Cannot contain or match the world name
+
+3.  (Optional) Customize `modifiers.conf` for gameplay rules:
+
+    PRESET="Easy"  # or Normal, Hard, Hardcore, etc.
+    MODIFIERS=( "Combat=hard" "Resources=less" ... )
+    SETKEYS=( "nomap" ... )
 
 ## Important Paths
 
-All paths are configured in `config.sh`. Adjust as needed:
+All paths are configured in `config.conf`. Adjust as needed:
 
     SERVER_DIR="/path/to/valheim"
     SAVEDIR="/srv/valheim/worlds"
@@ -109,7 +119,7 @@ All paths are configured in `config.sh`. Adjust as needed:
 
 ## Make Executable
 
-    chmod +x valheim-server-manager.sh config.sh helpers.sh
+    chmod +x valheim-server-manager.sh config.conf helpers.sh modifiers.conf
 
 ------------------------------------------------------------------------
 
@@ -127,7 +137,7 @@ All paths are configured in `config.sh`. Adjust as needed:
 
 # 🔄 Automatic Updates
 
-If enabled in `config.sh`:
+If enabled in `config.conf`:
 
     USE_STEAMCMD_UPDATE=true
 
@@ -168,7 +178,7 @@ shutdowns
 
 # 🌍 Crossplay Support
 
-Enable in `config.sh`:
+Enable in `config.conf`:
 
     CROSSPLAY=true
 
