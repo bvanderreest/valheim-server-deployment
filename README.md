@@ -77,7 +77,7 @@ This project consists of four modular files:
 - **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
 
 ### Benefits of This Architecture
-- **Easy Configuration** — Update settings in `config.sh` or `modifiers.conf` without touching script logic
+- **Easy Configuration** — Update settings in `config.conf` or `modifiers.conf` without touching script logic
 - **Focused Files** — Game modifiers separated for easy experimentation and version control
 - **Reusable Helpers** — Functions in `helpers.sh` can be sourced by other scripts if needed
 - **Clean Separation** — Clear organization of concerns (config, modifiers, utilities, commands)
