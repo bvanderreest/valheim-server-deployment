@@ -73,7 +73,7 @@ get_connected_players() {
   # Parse log for most recent player list (join/disconnect messages)
   if [[ ! -f "${LOGFILE}" ]]; then echo "0"; return; fi
   # Count unique players currently connected by examining recent log entries
-  grep -oP "(?<=Player ').*?(?=' )(?:connected|disconnected)" "${LOGFILE}" 2>/dev/null | sort | uniq | wc -l
+  grep -E "Player '[^']*' (connected|disconnected)" "${LOGFILE}" 2>/dev/null | sort | uniq | wc -l
 }
 
 count_connected_players() {
@@ -197,7 +197,7 @@ get_join_code() {
   # Extract join code and IP from server logs
   # Pattern: Session "ServerName" with join code XXXXXX and IP 1.2.3.4:PORT is active
   if [[ ! -f "${LOGFILE}" ]]; then echo ""; return; fi
-  grep -oP "with join code \K\d+" "${LOGFILE}" 2>/dev/null | tail -1
+  grep -E "with join code [0-9]+" "${LOGFILE}" 2>/dev/null | tail -1 | grep -oE "[0-9]+$"
 }
 
 get_server_ip_from_logs() {
@@ -205,7 +205,7 @@ get_server_ip_from_logs() {
   # Pattern: Session "ServerName" with join code XXXXXX and IP 1.2.3.4:PORT is active
   if [[ ! -f "${LOGFILE}" ]]; then echo ""; return 1; fi
   local ip
-  ip=$(grep -oP "and IP \K[\d\.]+:[\d]+" "${LOGFILE}" 2>/dev/null | tail -1)
+  ip=$(grep -oE "and IP [0-9.]+:[0-9]+" "${LOGFILE}" 2>/dev/null | tail -1 | cut -d' ' -f3)
   if [[ -n "${ip}" ]]; then
     echo "${ip%:*}"  # Return just the IP part, not the port
     return 0
