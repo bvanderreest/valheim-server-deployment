@@ -72,7 +72,7 @@ stats() {
   
   printf "\n"
   echo "World:            ${WORLD_NAME}"
-  echo "Connected:        $(count_connected_players) player(s)"
+  echo "Connected:        $(get_player_count) player(s)"
   
   printf "\n"
   local join_code; join_code="$(get_join_code)"
@@ -124,8 +124,39 @@ backup() {
   local ts; ts="$(date +"%Y-%m-%d_%H-%M-%S")"
   local out="${BACKUP_DIR}/world-${WORLD_NAME}-${ts}.tar.gz"
   echo "[backup] Creating ${out}…"
-  tar -czf "${out}" -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"
-  echo "[backup] OK."
+  
+  # Create backup asynchronously with progress tracking
+  {
+    # Get file sizes for progress tracking
+    local db_size=0
+    local fwl_size=0
+    if [[ -f "${SAVEDIR}/${WORLD_NAME}.db" ]]; then
+      db_size=$(stat -c %s "${SAVEDIR}/${WORLD_NAME}.db" 2>/dev/null || echo 0)
+    fi
+    if [[ -f "${SAVEDIR}/${WORLD_NAME}.fwl" ]]; then
+      fwl_size=$(stat -c %s "${SAVEDIR}/${WORLD_NAME}.fwl" 2>/dev/null || echo 0)
+    fi
+    local total_size=$((db_size + fwl_size))
+    
+    # Create backup with progress indication
+    if [[ $total_size -gt 0 ]]; then
+      # Use tar with progress indication using pv if available
+      if command -v pv &>/dev/null; then
+        # If pv is available, show progress
+        tar -czf - -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl" | pv -s $total_size > "${out}"
+      else
+        # Fallback to basic tar with simple progress indication
+        echo "[backup] Backup in progress (no progress indicator available)..."
+        tar -czf "${out}" -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"
+      fi
+    else
+      tar -czf "${out}" -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"
+    fi
+    echo "[backup] OK."
+  } &
+  
+  # Show that backup is running in background
+  echo "[backup] Backup started in background (PID: $!)."
 }
 
 usage() { echo "Usage: $0 {start|stop|restart|status|stats|logs|update|backup}"; }

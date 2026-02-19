@@ -117,6 +117,16 @@ All paths are configured in `config.conf`. Adjust as needed:
     LOG_DIR="/srv/valheim/logs"
     BACKUP_DIR="/srv/valheim/backups"
 
+### Server Directory Configuration
+
+The `SERVER_DIR` can be configured for different installation methods:
+
+- **Standard Steam Installation:** `/home/steam/valheim/valheim_server`
+- **Snap Installation:** `/home/vdrvalheim/snap/steam/common/.local/share/Steam/steamapps/common/Valheim dedicated server`
+- **Custom Installation:** Specify your own path
+
+The script will use the path defined in `SERVER_DIR` or default to `/home/steam/valheim/valheim_server` if not set.
+
 ## Make Executable
 
     chmod +x valheim-server-manager.sh config.conf helpers.sh modifiers.conf
