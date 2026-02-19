@@ -96,72 +96,49 @@ count_connected_players() {
 }
 
 get_player_count() {
-  # Get player count with better error handling and performance optimization
-  if [[ ! -f "${LOGFILE}" ]]; then
+  local logfile=${LOGFILE}
+  local count
+
+  if [[ -z "$logfile" || ! -f "$logfile" ]]; then
     echo "0"
     return 1
   fi
-  
-  # More efficient approach using awk to process log lines directly
-  # This avoids calling count_connected_players function and reduces overhead
-  local count
-  count=$(awk -v logfile="${LOGFILE}" '
-    BEGIN {
-      # Read only the last 2000 lines for performance (more than enough for player count)
-      max_lines = 2000
-      line_count = 0
-    }
-    {
-      # Store lines in array for processing
-      lines[++line_count] = $0
-    }
-    END {
-      # Process lines from the end backwards to find current players
-      connected_players = 0
-      player_status = ""
-      
-      # Process lines from newest to oldest
-      for (i = line_count; i >= 1 && connected_players < 1000; i--) {
-        line = lines[i]
-        
-        # Look for player connected/disconnected messages
-        if (line ~ /Player \'([^\']+)\' (connected|disconnected)/) {
-          # Extract player name and action
-          player = line
-          gsub(/.*Player \'/, "", player)
-          gsub(/\' (connected|disconnected).*/, "", player)
-          
-          action = line
-          gsub(/.* (connected|disconnected).*/, "", action)
-          action = tolower(action)
-          
-          # Update player status
-          if (action == "connected") {
-            player_status[player] = 1
-          } else if (action == "disconnected") {
-            player_status[player] = 0
+
+  count=$(
+    awk -v max_lines=2000 '
+      {
+        # ring buffer to store last max_lines lines
+        idx = (NR - 1) % max_lines
+        lines[idx] = $0
+        if (NR > max_lines) filled = 1
+      }
+      END {
+        start = filled ? (NR % max_lines) : 0
+        total = filled ? max_lines : NR
+        for (k = 0; k < total; k++) {
+          i = (start + k) % max_lines
+          line = lines[i]
+
+          # Use \047 which is '\'' to avoid breaking single-quoted strings
+          if (match(line, /Player \047([^ \047][^\047]*)\047 (connected|disconnected)/, m)) {
+            player = m[1]
+            action = tolower(m[2])
+            player_status[player] = (action == "connected") ? 1 : 0
           }
         }
+
+        c = 0
+        for (p in player_status) if (player_status[p] == 1) c++
+        print c
       }
-      
-      # Count currently connected players
-      count = 0
-      for (player in player_status) {
-        if (player_status[player] == 1) {
-          count++
-        }
-      }
-      
-      print count
-    }
-  ' "${LOGFILE}" 2>/dev/null)
-  
-  # Validate that count is a number
-  if [[ -z "$count" ]] || ! [[ "$count" =~ ^[0-9]+$ ]]; then
+    ' -- "$logfile" 2>/dev/null
+  ) || count="0"
+
+  if [[ -z "$count" || ! "$count" =~ ^[0-9]+$ ]]; then
     echo "0"
     return 1
   fi
-  
+
   echo "$count"
   return 0
 }
