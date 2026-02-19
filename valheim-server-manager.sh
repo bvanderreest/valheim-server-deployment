@@ -1,7 +1,7 @@
 
 #!/usr/bin/env bash
 # Valheim server manager — manual control, resilient to power loss.
-# Commands: start | stop | restart | status | logs | update | backup
+# Commands: start | stop | restart | stats | logs | update | backup
 
 set -eo pipefail
 
@@ -51,7 +51,6 @@ stop() {
 }
 
 restart() { stop; sleep 2; start; }
-status()  { is_running && echo "RUNNING (PID $(cat "${PIDFILE}"))" || echo "STOPPED"; }
 logs()    { ensure_paths; echo "Tailing ${LOGFILE} (Ctrl+C to exit)…"; touch "${LOGFILE}"; tail -n 200 -F "${LOGFILE}"; }
 
 stats() {
@@ -159,13 +158,13 @@ backup() {
   echo "[backup] Backup started in background (PID: $!)."
 }
 
-usage() { echo "Usage: $0 {start|stop|restart|status|logs|update|backup}"; }
+usage() { echo "Usage: $0 {start|stop|restart|stats|logs|update|backup}"; }
 
 case "${1:-}" in
   start) start ;;
   stop) stop ;;
   restart) restart ;;
-  status) status ;;
+  stats) stats ;;
   logs) logs ;;
   update) update ;;
   backup) backup ;;
