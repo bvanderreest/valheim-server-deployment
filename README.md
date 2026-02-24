@@ -107,11 +107,26 @@ This project consists of four modular files:
 
 3.  (Optional) Customize `modifiers.conf` for gameplay rules:
 
+    # First, select your desired customization level
+    DEFAULT_MODIFIER_GROUP="standard"  # or "basic", "preset", "hardcore", "custom"
+    
+    # Then configure specific settings
     PRESET="Easy"  # or Normal, Hard, Hardcore, etc.
     MODIFIERS=( "Combat=hard" "Resources=less" ... )
     SETKEYS=( "nomap" ... )
 
 For detailed information about the enhanced modifier system, please refer to the [MODIFIERS.md](MODIFIERS.md) file.
+
+## New "Preset" Modifier Group
+
+A new "preset" modifier group has been added that allows you to use only the preset configuration without any additional modifiers (basic, advanced, or expert). To use this option:
+
+1. Set `DEFAULT_MODIFIER_GROUP="preset"` in `modifiers.conf`
+2. Or manually configure the following settings:
+   - `ENABLE_BASIC_MODIFIERS=false`
+   - `ENABLE_ADVANCED_MODIFIERS=false`
+   - `ENABLE_EXPERT_MODIFIERS=false`
+   - `ENABLE_CUSTOM_MODIFIERS=false`
 
 ## Important Paths
 

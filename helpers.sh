@@ -7,7 +7,52 @@
 
 ensure_paths() { mkdir -p "${SAVEDIR}" "${LOG_DIR}" "${BACKUP_DIR}"; }
 
+# Function to set modifier group variables based on DEFAULT_MODIFIER_GROUP
+set_modifier_group() {
+  # Default to standard if not set
+  local modifier_group="${DEFAULT_MODIFIER_GROUP:-standard}"
+  
+  # Reset all modifier group flags
+  ENABLE_BASIC_MODIFIERS=false
+  ENABLE_ADVANCED_MODIFIERS=false
+  ENABLE_EXPERT_MODIFIERS=false
+  ENABLE_CUSTOM_MODIFIERS=false
+  
+  # Set modifier group based on selection
+  case "${modifier_group,,}" in
+    "basic")
+      ENABLE_BASIC_MODIFIERS=true
+      ;;
+    "preset")
+      # For preset only, we disable all modifier tiers except preset
+      # This means we don't enable any modifiers, just use the preset
+      # The preset is handled separately via -preset flag in build_args
+      ;;
+    "standard")
+      ENABLE_BASIC_MODIFIERS=true
+      ENABLE_ADVANCED_MODIFIERS=true
+      ;;
+    "hardcore")
+      ENABLE_BASIC_MODIFIERS=true
+      ENABLE_ADVANCED_MODIFIERS=true
+      ENABLE_EXPERT_MODIFIERS=true
+      ;;
+    "custom")
+      ENABLE_CUSTOM_MODIFIERS=true
+      ;;
+    *)
+      # Default to standard if invalid value
+      ENABLE_BASIC_MODIFIERS=true
+      ENABLE_ADVANCED_MODIFIERS=true
+      echo "Warning: Invalid DEFAULT_MODIFIER_GROUP '${modifier_group}', defaulting to 'standard'" >&2
+      ;;
+  esac
+}
+
 build_args() {
+  # Set modifier group variables based on DEFAULT_MODIFIER_GROUP
+  set_modifier_group
+  
   local args=()
   args+=( -nographics -batchmode )
   args+=( -name "${SERVER_NAME}" -port "${PORT}" -world "${WORLD_NAME}" -password "${PASSWORD}" )

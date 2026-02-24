@@ -2,6 +2,14 @@
 
 This document explains the enhanced modifier system implemented in the Valheim server manager. The system provides a tiered approach to configuring world modifiers, allowing server administrators to choose from basic, advanced, and expert options.
 
+## Improved UI/UX Structure
+
+The configuration has been restructured to provide a better user experience:
+1. **First, select your customization level** - Choose from preset, standard, hardcore, or custom
+2. **Then configure specific settings** - Modify presets, modifiers, and setkeys as needed
+
+This upfront selection makes it easier to understand what configuration options are available before diving into details.
+
 ## Overview
 
 The enhanced modifier system separates modifiers into three tiers:
@@ -94,6 +102,123 @@ SETKEYS=(
 )
 ```
 
+## Improved Configuration Structure
+
+The `modifiers.conf` file has been restructured for better usability:
+
+### 1. Customization Level Selection
+```bash
+# Select your desired level of customization upfront
+# This determines which modifier tiers will be active
+# Options: "preset", "standard", "hardcore", "custom"
+DEFAULT_MODIFIER_GROUP="standard"
+```
+
+### 2. Functional Implementation
+The `DEFAULT_MODIFIER_GROUP` setting is now fully functional and automatically configures the appropriate modifier tiers:
+- **preset**: Only uses the preset configuration without additional modifiers
+- **standard**: Enables basic and advanced modifiers for balanced gameplay
+- **hardcore**: Enables all modifier tiers for maximum challenge
+- **basic**: Enables only basic modifiers (overwrites presets)
+- **custom**: Enables custom modifiers only
+
+### 2. Preset Difficulty
+```bash
+# Choose a preset base (case-insensitive): casual | easy | normal | hard | hardcore | immersive | hammer
+# Presets provide a quick way to set multiple modifiers at once
+PRESET="normal"
+```
+
+### 3. Boolean Setkeys
+```bash
+# Boolean setkeys that act as toggles for various features
+# These are used with the -setkey flag and are typically simple on/off switches
+SETKEYS=(
+    "nomap"
+    "nobuildcost"
+    "nopassivemobs"
+    "noevent"
+    "noenemy"
+    "noitem"
+    "noportal"
+    "noenemydrops"
+)
+```
+
+### 4. Modifier Tiers (Automatically Configured)
+The following modifier tiers are defined but automatically controlled by the DEFAULT_MODIFIER_GROUP setting:
+
+#### Basic Modifiers
+```bash
+BASIC_MODIFIERS=(
+    "Combat=easy"
+    "DeathPenalty=easy"
+    "Resources=more"
+    "Raids=less"
+    "Portals=casual"
+)
+```
+
+#### Advanced Modifiers
+```bash
+ADVANCED_MODIFIERS=(
+    "EnemyLevelUpRate=100"
+    "ResourceRate=100"
+    "StaminaRegenRate=100"
+    "PlayerDamage=100"
+    "EnemyDamage=100"
+    "PlayerHealth=100"
+    "EnemyHealth=100"
+    "DungeonBuild=0"
+)
+```
+
+#### Expert Modifiers
+```bash
+EXPERT_MODIFIERS=(
+    "EnemySpeedSize=100"
+    "WorldLevelLockedTools=0"
+    "NoStaminaRegen=0"
+    "NoFoodRegen=0"
+    "NoToolDurability=0"
+    "NoFireplaceFuel=0"
+    "NoBuildingCost=0"
+    "NoCraftingCost=0"
+    "NoCookingCost=0"
+    "NoFishingCost=0"
+    "NoSmithingCost=0"
+    "NoWoodcuttingCost=0"
+    "NoMiningCost=0"
+    "NoHuntingCost=0"
+    "NoFarmingCost=0"
+    "NoAlchemyCost=0"
+    "NoConstructionCost=0"
+    "NoRepairCost=0"
+    "NoRepairTime=0"
+    "NoCraftingTime=0"
+    "NoCookingTime=0"
+    "NoFishingTime=0"
+    "NoSmithingTime=0"
+    "NoWoodcuttingTime=0"
+    "NoMiningTime=0"
+    "NoHuntingTime=0"
+    "NoFarmingTime=0"
+    "NoAlchemyTime=0"
+    "NoConstructionTime=0"
+    "NoRepairTime=0"
+)
+```
+
+### 5. Custom Modifiers
+```bash
+CUSTOM_MODIFIERS=(
+    # Example custom modifiers - uncomment and modify as needed
+    # "CustomEnemyDamage=150"
+    # "CustomResourceRate=120"
+    # "CustomStaminaRegenRate=80"
+)
+```
+
 ## Tier Control
 
 Each modifier tier can be enabled or disabled using these variables:
@@ -105,6 +230,42 @@ ENABLE_CUSTOM_MODIFIERS=false
 ```
 
 ## Usage Examples
+
+### Basic Configuration
+```bash
+# Enable only basic modifiers (overwrites presets)
+DEFAULT_MODIFIER_GROUP="basic"
+PRESET="normal"  # This will be overwritten by basic level
+MODIFIERS=( "Combat=hard" "Resources=more" )
+SETKEYS=( "nomap" "nobuildcost" )
+```
+
+### Standard Configuration
+```bash
+# Enable basic and advanced modifiers
+DEFAULT_MODIFIER_GROUP="standard"
+PRESET="normal"
+MODIFIERS=( "Combat=hard" "Resources=more" "EnemyLevelUpRate=120" )
+SETKEYS=( "nomap" "nobuildcost" )
+```
+
+### Hardcore Configuration
+```bash
+# Enable all modifier tiers for maximum challenge
+DEFAULT_MODIFIER_GROUP="hardcore"
+PRESET="hardcore"
+MODIFIERS=( "Combat=hard" "Resources=more" "EnemyLevelUpRate=120" "EnemySpeedSize=150" )
+SETKEYS=( "nomap" "nobuildcost" "noenemy" )
+```
+
+### Custom Configuration
+```bash
+# Use custom modifiers only
+DEFAULT_MODIFIER_GROUP="custom"
+PRESET="normal"
+MODIFIERS=( "CustomEnemyDamage=150" "CustomResourceRate=120" )
+SETKEYS=( "nomap" "nobuildcost" )
+```
 
 ### Standard Configuration
 ```bash
@@ -131,6 +292,15 @@ ENABLE_BASIC_MODIFIERS=false
 ENABLE_ADVANCED_MODIFIERS=false
 ENABLE_EXPERT_MODIFIERS=false
 ENABLE_CUSTOM_MODIFIERS=true
+```
+
+### Preset Configuration
+```bash
+# Enable only the preset without additional modifiers
+ENABLE_BASIC_MODIFIERS=false
+ENABLE_ADVANCED_MODIFIERS=false
+ENABLE_EXPERT_MODIFIERS=false
+ENABLE_CUSTOM_MODIFIERS=false
 ```
 
 ## Available Modifier Categories
@@ -184,6 +354,28 @@ ENABLE_CUSTOM_MODIFIERS=true
 - **NoConstructionTime**: Disable construction time (0 or 1)
 - **NoRepairTime**: Disable repair time (0 or 1)
 
+## Modifier Groups
+
+The system supports the following modifier groups for easy configuration:
+
+- **basic**: Basic modifiers only (overwrites presets)
+- **standard**: Basic + Advanced modifiers
+- **hardcore**: Basic + Advanced + Expert modifiers
+- **custom**: Custom modifiers only
+- **preset**: Pure preset only (no additional modifiers)
+
+## Customization Levels
+
+The new configuration structure allows you to select your desired level of customization upfront:
+
+1. **basic** - Basic modifiers only (overwrites presets)
+2. **preset** - Only the base preset configuration, no additional modifiers
+3. **standard** - Basic + Advanced modifiers for balanced gameplay
+4. **hardcore** - Basic + Advanced + Expert modifiers for maximum challenge
+5. **custom** - Custom modifiers only, allowing for unique server experiences
+
+This upfront selection makes it easier to understand what configuration options are available before diving into specific settings.
+
 ## Setkey Options
 
 Boolean setkeys that act as toggles for various features:
@@ -203,6 +395,21 @@ Boolean setkeys that act as toggles for various features:
 3. **Document Changes**: Keep track of modifier combinations that work well for your community
 4. **Consider Balance**: Be mindful of how modifier combinations affect gameplay balance
 5. **Use Presets**: Leverage the preset system for quick baseline configurations
+6. **Use Pure Preset**: For a clean preset-only configuration, set `DEFAULT_MODIFIER_GROUP="preset"`
+
+## Using the "Preset" Modifier Group
+
+The "preset" modifier group allows you to use only the preset configuration without any additional modifiers (basic, advanced, or expert). To use this option:
+
+1. Set `DEFAULT_MODIFIER_GROUP="preset"` in `modifiers.conf`
+
+## Improved Configuration Structure
+
+The configuration has been restructured to provide a better user experience:
+1. **First, select your customization level** - Choose from preset, standard, hardcore, or custom
+2. **Then configure specific settings** - Modify presets, modifiers, and setkeys as needed
+
+This upfront selection makes it easier to understand what configuration options are available before diving into details.
 
 ## Troubleshooting
 
