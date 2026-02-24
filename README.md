@@ -1,9 +1,5 @@
 # 🛡 Valheim Dedicated Server Manager
 
-[![GitHub](https://img.shields.io/github/license/your-repo/valheim-server-manager)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/your-repo/valheim-server-manager)](https://github.com/your-repo/valheim-server-manager/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/your-repo/valheim-server-manager)](https://github.com/your-repo/valheim-server-manager/network)
-
 A resilient, production-ready Bash management script for running a **Valheim Dedicated Server** on Linux. This project provides clean lifecycle management, SteamCMD updates, automatic world backups, crash recovery, and configurable gameplay modifiers --- split across four modular files for clean separation of configuration, helpers, and commands. Perfect for homelab operators and server administrators looking for a robust, easy-to-use solution to host your own Valheim server!
 
 ## 🚀 Key Features
