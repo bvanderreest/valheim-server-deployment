@@ -1,12 +1,21 @@
 # 🛡 Valheim Dedicated Server Manager
 
-A resilient, production-ready Bash management script for running a
-**Valheim Dedicated Server** on Linux.
+[![GitHub](https://img.shields.io/github/license/your-repo/valheim-server-manager)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/your-repo/valheim-server-manager)](https://github.com/your-repo/valheim-server-manager/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/your-repo/valheim-server-manager)](https://github.com/your-repo/valheim-server-manager/network)
 
-This project provides clean lifecycle management, SteamCMD updates,
-automatic world backups, crash recovery, and configurable gameplay
-modifiers --- split across four modular files for clean separation
-of configuration, helpers, and commands.
+A resilient, production-ready Bash management script for running a **Valheim Dedicated Server** on Linux. This project provides clean lifecycle management, SteamCMD updates, automatic world backups, crash recovery, and configurable gameplay modifiers --- split across four modular files for clean separation of configuration, helpers, and commands. Perfect for homelab operators and server administrators looking for a robust, easy-to-use solution to host your own Valheim server!
+
+## 🚀 Key Features
+
+- **🎮 Game Modifiers**: Advanced modifier system with 5 customization levels (basic, preset, standard, hardcore, custom)
+- **⚡ Power Loss Resilience**: Automatic world corruption guard + restore
+- **💾 Automated Backups**: Rotating world backups with automatic restoration
+- **🔄 SteamCMD Updates**: Auto-update support for Valheim server (AppID 896660)
+- **🌍 Crossplay Support**: Steam + Xbox cross-platform support
+- **📊 Enhanced Monitoring**: Real-time player monitoring with A2S protocol support
+- **🔧 Modular Design**: Clean separation of configuration, helpers, and commands
+- **🛡 Production Ready**: Designed for high uptime and reliable operation
 
 ------------------------------------------------------------------------
 
@@ -87,7 +96,7 @@ This project consists of four modular files:
 
 ## 📦 Deployment
 
-1.  Copy all four files to your server:
+1.  **Copy all files to your server:**
 
         config.conf
         modifiers.conf
@@ -95,25 +104,29 @@ This project consists of four modular files:
         valheim-server-manager.sh
         valheim-monitor.sh
 
-2.  Customize `config.conf` for your server setup:
+2.  **Customize `config.conf` for your server setup:**
 
+    ```bash
     SERVER_NAME="Your Server Name"
     WORLD_NAME="YourWorld"
     PASSWORD="YourPassword"
 
-    **Password Requirements:**
-    - Minimum 5 characters
-    - Cannot contain or match the world name
+    # Password Requirements:
+    # - Minimum 5 characters
+    # - Cannot contain or match the world name
+    ```
 
-3.  (Optional) Customize `modifiers.conf` for gameplay rules:
+3.  **(Optional) Customize `modifiers.conf` for gameplay rules:**
 
-    # First, select your desired customization level
+    ```bash
+    ## First, select your desired customization level
     DEFAULT_MODIFIER_GROUP="standard"  # or "basic", "preset", "hardcore", "custom"
     
-    # Then configure specific settings
+    ## Then configure specific settings
     PRESET="Easy"  # or Normal, Hard, Hardcore, etc.
     MODIFIERS=( "Combat=hard" "Resources=less" ... )
     SETKEYS=( "nomap" ... )
+    ```
 
 For detailed information about the enhanced modifier system, please refer to the [MODIFIERS.md](MODIFIERS.md) file.
 
@@ -175,13 +188,15 @@ The monitoring script can be used externally:
 
 # 🎮 Usage
 
-    ./valheim-server-manager.sh start
-    ./valheim-server-manager.sh stop
-    ./valheim-server-manager.sh restart
-    ./valheim-server-manager.sh stats
-    ./valheim-server-manager.sh logs
-    ./valheim-server-manager.sh update
-    ./valheim-server-manager.sh backup
+```bash
+./valheim-server-manager.sh start
+./valheim-server-manager.sh stop
+./valheim-server-manager.sh restart
+./valheim-server-manager.sh stats
+./valheim-server-manager.sh logs
+./valheim-server-manager.sh update
+./valheim-server-manager.sh backup
+```
 
 ------------------------------------------------------------------------
 
@@ -261,7 +276,27 @@ Allows Steam + Xbox cross-platform support.
 
 # 📜 License
 
-MIT (or your preferred license)
+MIT License
+
+Copyright (c) 2024 Valheim Server Manager
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
 ------------------------------------------------------------------------
 
@@ -272,3 +307,15 @@ Designed for self-hosted environments requiring:
 -   High uptime
 -   Backup resilience
 -   Simple operational control
+
+## 🌟 Why Choose This Manager?
+
+This Valheim server manager stands out because it combines:
+
+- **Production-Ready Stability**: Built with resilience in mind, including automatic corruption recovery
+- **Modular Architecture**: Clean separation of concerns makes customization easy
+- **Comprehensive Features**: Everything you need in one package - updates, backups, monitoring, and more
+- **Easy Deployment**: Simple setup process with clear documentation
+- **Flexible Gameplay**: Advanced modifier system with 5 customization levels to suit any playstyle
+
+Perfect for both casual players wanting to host their own server and experienced administrators looking for a reliable solution.
