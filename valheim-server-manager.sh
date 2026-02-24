@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 # Valheim server manager — manual control, resilient to power loss.
 # Commands: start | stop | restart | stats | logs | update | backup
@@ -12,7 +11,7 @@ source "${SCRIPT_DIR}/helpers.sh"
 
 ########################################
 #               COMMANDS               #
-########################################
+######################################
 
 start() {
   ensure_paths
@@ -73,6 +72,17 @@ stats() {
   echo "World:            ${WORLD_NAME}"
   echo "Connected:        $(count_connected_players) player(s)"
   
+  # Additional server info if A2S is available
+  if command -v a2s &> /dev/null; then
+    echo "Server Info:"
+    local server_name
+    server_name=$(a2s info "${SERVER_IP}:${PORT}" 2>/dev/null | grep "name" | cut -d: -f2- | xargs || echo "N/A")
+    echo "  Server Name:    ${server_name}"
+    local max_players
+    max_players=$(a2s info "${SERVER_IP}:${PORT}" 2>/dev/null | grep "maxplayers" | cut -d: -f2- | xargs || echo "N/A")
+    echo "  Max Players:    ${max_players}"
+  fi
+  
   printf "\n"
   local join_code; join_code="$(get_join_code)"
   local server_ip; server_ip="$(get_server_ip_from_logs)"
@@ -119,43 +129,40 @@ update() {
 }
 
 backup() {
-  ensure_paths
+  echo "[backup] Creating backup for world: $WORLD_NAME"
+  
+  # Check if server is running and stop it for clean backup
+  if is_running; then
+    echo "[backup] Server is running. Stopping for clean backup..."
+    stop
+    sleep 2  # Allow time for graceful shutdown
+  fi
+  
+  # Validate backup directory exists
+  mkdir -p "$BACKUP_DIR"
+  
+  # Check if world files exist
+  if [[ ! -f "$SAVEDIR/$WORLD_NAME.db" ]] || [[ ! -f "$SAVEDIR/$WORLD_NAME.fwl" ]]; then
+    echo "[backup] Warning: World files not found. This may be normal if world hasn't been created yet."
+    return 1
+  fi
+  
+  # Create timestamped backup
   local ts; ts="$(date +"%Y-%m-%d_%H-%M-%S")"
   local out="${BACKUP_DIR}/world-${WORLD_NAME}-${ts}.tar.gz"
   echo "[backup] Creating ${out}…"
   
-  # Create backup asynchronously with progress tracking
-  {
-    # Get file sizes for progress tracking
-    local db_size=0
-    local fwl_size=0
-    if [[ -f "${SAVEDIR}/${WORLD_NAME}.db" ]]; then
-      db_size=$(stat -c %s "${SAVEDIR}/${WORLD_NAME}.db" 2>/dev/null || echo 0)
-    fi
-    if [[ -f "${SAVEDIR}/${WORLD_NAME}.fwl" ]]; then
-      fwl_size=$(stat -c %s "${SAVEDIR}/${WORLD_NAME}.fwl" 2>/dev/null || echo 0)
-    fi
-    local total_size=$((db_size + fwl_size))
+  # Perform backup synchronously
+  if tar -czf "$out" -C "$SAVEDIR" "$WORLD_NAME.db" "$WORLD_NAME.fwl"; then
+    echo "[backup] OK. Backup completed successfully."
     
-    # Create backup with progress indication
-    if [[ $total_size -gt 0 ]]; then
-      # Use tar with progress indication using pv if available
-      if command -v pv &>/dev/null; then
-        # If pv is available, show progress
-        tar -czf - -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl" | pv -s $total_size > "${out}"
-      else
-        # Fallback to basic tar with simple progress indication
-        echo "[backup] Backup in progress (no progress indicator available)..."
-        tar -czf "${out}" -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"
-      fi
-    else
-      tar -czf "${out}" -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"
-    fi
-    echo "[backup] OK."
-  } &
-  
-  # Show that backup is running in background
-  echo "[backup] Backup started in background (PID: $!)."
+    # Clean up old backups (keep last 10)
+    cd "$BACKUP_DIR"
+    ls -t | grep "^world-$WORLD_NAME-" | tail -n +11 | xargs -r rm
+  else
+    echo "[backup] ERROR: Backup failed!"
+    return 1
+  fi
 }
 
 usage() { echo "Usage: $0 {start|stop|restart|stats|logs|update|backup}"; }

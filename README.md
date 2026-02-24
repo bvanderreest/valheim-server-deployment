@@ -19,6 +19,7 @@ of configuration, helpers, and commands.
 -   🌍 Crossplay support (PlayFab relay)
 -   📜 Log management
 -   🛠 Fully configurable paths and settings
+-   📊 Enhanced player monitoring with A2S protocol support
 
 ------------------------------------------------------------------------
 
@@ -75,6 +76,7 @@ This project consists of four modular files:
 - **modifiers.conf** — Game modifiers and presets (easily customizable gameplay rules)
 - **helpers.sh** — Reusable helper functions (ensure_paths, build_args, is_running, guard_world)
 - **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
+- **valheim-monitor.sh** — Standalone monitoring script for external use
 
 ### Benefits of This Architecture
 - **Easy Configuration** — Update settings in `config.conf` or `modifiers.conf` without touching script logic
@@ -91,6 +93,7 @@ This project consists of four modular files:
         modifiers.conf
         helpers.sh
         valheim-server-manager.sh
+        valheim-monitor.sh
 
 2.  Customize `config.conf` for your server setup:
 
@@ -107,6 +110,8 @@ This project consists of four modular files:
     PRESET="Easy"  # or Normal, Hard, Hardcore, etc.
     MODIFIERS=( "Combat=hard" "Resources=less" ... )
     SETKEYS=( "nomap" ... )
+
+For detailed information about the enhanced modifier system, please refer to the [MODIFIERS.md](MODIFIERS.md) file.
 
 ## Important Paths
 
@@ -129,7 +134,27 @@ The script will use the path defined in `SERVER_DIR` or default to `/home/steam/
 
 ## Make Executable
 
-    chmod +x valheim-server-manager.sh config.conf helpers.sh modifiers.conf
+On Linux systems, make the script executable:
+    
+    chmod +x valheim-server-manager.sh
+
+## Enhanced Monitoring
+
+The server manager now supports enhanced player monitoring:
+- Uses A2S protocol for real-time accurate player counts
+- Falls back to log parsing when A2S is not available
+- Includes additional server information in stats output
+- Provides a standalone monitoring script `valheim-monitor.sh` for external use
+
+To use A2S protocol, install the python-valve package:
+```
+pip install python-valve
+```
+
+The monitoring script can be used externally:
+```
+./valheim-monitor.sh monitor json
+```
 
 ------------------------------------------------------------------------
 
@@ -138,7 +163,7 @@ The script will use the path defined in `SERVER_DIR` or default to `/home/steam/
     ./valheim-server-manager.sh start
     ./valheim-server-manager.sh stop
     ./valheim-server-manager.sh restart
-    ./valheim-server-manager.sh status
+    ./valheim-server-manager.sh stats
     ./valheim-server-manager.sh logs
     ./valheim-server-manager.sh update
     ./valheim-server-manager.sh backup

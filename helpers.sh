@@ -15,14 +15,47 @@ build_args() {
   args+=( -saveinterval "${SAVE_INTERVAL}" -backups "${BACKUPS_KEEP}" -backupshort "${BACKUP_SHORT}" -backuplong "${BACKUP_LONG}" )
   [[ "${CROSSPLAY}" == "true" ]] && args+=( -crossplay )
   [[ -n "${PRESET}" ]] && args+=( -preset "${PRESET}" )
-  for m in "${MODIFIERS[@]}"; do
-    local cat="${m%%=*}" val="${m#*=}"
-    [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
-  done
-  for k in "${SETKEYS[@]}"; do
-    [[ -n "${k}" ]] && args+=( -setkey "${k,,}" )
-  done
-  printf '%s\n' "${args[@]}"
+  
+  # Process basic modifiers
+  if [[ "${ENABLE_BASIC_MODIFIERS}" == "true" ]]; then
+    for m in "${BASIC_MODIFIERS[@]}"; do
+      local cat="${m%%=*}" val="${m#*=}"
+      [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
+    done
+  fi
+  
+  # Process advanced modifiers
+  if [[ "${ENABLE_ADVANCED_MODIFIERS}" == "true" ]]; then
+    for m in "${ADVANCED_MODIFIERS[@]}"; do
+      local cat="${m%%=*}" val="${m#*=}"
+      [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
+    done
+  fi
+  
+  # Process expert modifiers
+  if [[ "${ENABLE_EXPERT_MODIFIERS}" == "true" ]]; then
+    for m in "${EXPERT_MODIFIERS[@]}"; do
+      local cat="${m%%=*}" val="${m#*=}"
+      [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
+    done
+  fi
+  
+  # Process custom modifiers
+  if [[ "${ENABLE_CUSTOM_MODIFIERS}" == "true" ]]; then
+    for m in "${CUSTOM_MODIFIERS[@]}"; do
+      local cat="${m%%=*}" val="${m#*=}"
+      [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
+    done
+  fi
+  
+  # Process custom arguments
+  if [[ "${ENABLE_CUSTOM_ARGS}" == "true" ]]; then
+    for arg in "${CUSTOM_ARGS[@]}"; do
+      args+=( "${arg}" )
+    done
+  fi
+  
+  echo "${args[@]}"
 }
 
 is_running() { [[ -f "${PIDFILE}" ]] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; }
@@ -37,7 +70,8 @@ guard_world() {
     local last; last="$(latest_backup || true)"
     if [[ -n "${last}" ]]; then
       echo "[guard] Damaged/missing world. Restoring from ${last}"
-      tar -xzf "${last}" -C "${SAVEDIR}"
+      # Extract both files from backup to ensure both are restored
+      tar -xzf "${last}" -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"
       echo "[guard] Restore complete."
     else
       echo "[guard] No backups found; starting with current files (if any)."
@@ -56,81 +90,77 @@ get_uptime() {
 }
 
 format_uptime() {
-  local seconds=$1
-  local days=$((seconds / 86400))
-  local hours=$(((seconds % 86400) / 3600))
-  local mins=$(((seconds % 3600) / 60))
-  if (( days > 0 )); then
-    printf "%dd %dh %dm" "$days" "$hours" "$mins"
-  elif (( hours > 0 )); then
-    printf "%dh %dm" "$hours" "$mins"
-  else
-    printf "%dm" "$mins"
-  fi
-}
-
-get_connected_players() {
-  # Parse log for most recent player list (join/disconnect messages)
-  if [[ ! -f "${LOGFILE}" ]]; then echo "0"; return; fi
-  # Count unique players currently connected by examining recent log entries
-  grep -oP "(?<=Player ').*?(?=' )(?:connected|disconnected)" "${LOGFILE}" 2>/dev/null | sort | uniq | wc -l
+  local uptime="$1"
+  local days=$((uptime / 86400))
+  local hours=$((uptime % 86400 / 3600))
+  local mins=$((uptime % 3600 / 60))
+  local secs=$((uptime % 60))
+  
+  local result=""
+  [[ $days -gt 0 ]] && result="${days}d "
+  [[ $hours -gt 0 ]] && result="${result}${hours}h "
+  [[ $mins -gt 0 ]] && result="${result}${mins}m "
+  [[ $secs -gt 0 ]] && result="${result}${secs}s"
+  
+  echo "${result:-0s}"
 }
 
 count_connected_players() {
-  # More accurate: track who connected and disconnected
-  if [[ ! -f "${LOGFILE}" ]]; then echo "0"; return; fi
-  local -A players
-  while IFS= read -r line; do
-    if [[ $line =~ \"([^\"]+)\"\ (connected|disconnected) ]]; then
-      local player="${BASH_REMATCH[1]}"
-      local action="${BASH_REMATCH[2]}"
-      if [[ "${action}" == "connected" ]]; then
-        players["${player}"]=1
-      else
-        unset 'players["${player}"]'
-      fi
-    fi
-  done < "${LOGFILE}"
-  echo "${#players[@]}"
-}
-
-get_server_ip() {
-  # Try to get external IP address (common methods)
-  # Check for common public IP detection services
-  local ip
+  if ! is_running; then echo "0"; return; fi
   
-  # Try curl first (most reliable)
-  if command -v curl &>/dev/null; then
-    ip=$(curl -s --max-time 2 --connect-timeout 2 ifconfig.me 2>/dev/null || \
-         curl -s --max-time 2 --connect-timeout 2 icanhazip.com 2>/dev/null)
-    [[ -n "${ip}" ]] && echo "${ip}" && return
+  # Try A2S query first (most accurate)
+  if command -v a2s &> /dev/null; then
+    local player_count
+    player_count=$(a2s players "${SERVER_IP}:${PORT}" 2>/dev/null | grep -c "Player" || echo "0")
+    echo "$player_count"
+    return
   fi
   
-  # Fallback to dig/nslookup
-  if command -v dig &>/dev/null; then
-    ip=$(dig +short myip.opendns.com @resolver1.opendns.com 2>/dev/null | tail -1)
-    [[ -n "${ip}" && "${ip}" != ";" ]] && echo "${ip}" && return
-  fi
-  
-  # Fallback to hostname
-  if command -v hostname &>/dev/null; then
-    ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-    [[ -n "${ip}" ]] && echo "${ip}" && return
-  fi
-  
-  echo "unknown"
+  # Fallback to log parsing
+  local log
+  log="$(tail -n 500 "${LOGFILE}" 2>/dev/null || echo "")"
+  local count
+  count=$(echo "$log" | grep -c "Connected player" || echo "0")
+  echo "$count"
 }
 
 get_join_code() {
-  # Extract join code and IP from server logs
-  # Pattern: Session "ServerName" with join code XXXXXX and IP 1.2.3.4:PORT is active
-  if [[ ! -f "${LOGFILE}" ]]; then echo ""; return; fi
-  grep -oP "with join code \K\d+" "${LOGFILE}" 2>/dev/null | tail -1
+  if ! is_running; then echo ""; return; fi
+  local log; log="$(tail -n 200 "${LOGFILE}" 2>/dev/null || echo "")"
+  echo "$log" | grep -oE "Join code: [0-9a-zA-Z]{6}" | cut -d' ' -f2 || echo ""
 }
 
 get_server_ip_from_logs() {
-  # Extract IP from server logs (more accurate than external IP detection)
-  # Pattern: Session "ServerName" with join code XXXXXX and IP 1.2.3.4:PORT is active
-  if [[ ! -f "${LOGFILE}" ]]; then echo ""; return; fi
-  grep -oP "and IP \K[\d\.]+:[\d]+" "${LOGFILE}" 2>/dev/null | tail -1
+  if ! is_running; then echo ""; return; fi
+  local log; log="$(tail -n 200 "${LOGFILE}" 2>/dev/null || echo "")"
+  echo "$log" | grep -oE "Server IP: [0-9.]{7,15}" | cut -d' ' -f2 || echo ""
+}
+
+get_server_ip() {
+  # Get server IP address
+  local ip; ip="$(hostname -I 2>/dev/null | cut -d' ' -f1 || echo "")"
+  [[ -n "${ip}" ]] && echo "${ip}" || echo "127.0.0.1"
+}
+
+# Enhanced monitoring function for external use
+monitor_server() {
+  local output_format="${1:-text}"  # text or json
+  
+  if [[ "${output_format}" == "json" ]]; then
+    echo "{"
+    echo "  \"status\": \"$(is_running && echo "running" || echo "stopped")\","
+    echo "  \"players\": \"$(count_connected_players)\","
+    echo "  \"server_name\": \"${SERVER_NAME}\","
+    echo "  \"world\": \"${WORLD_NAME}\","
+    echo "  \"port\": \"${PORT}\","
+    echo "  \"public\": \"${PUBLIC}\""
+    echo "}"
+  else
+    echo "Server Status:"
+    echo "  Status: $(is_running && echo "Running" || echo "Stopped")"
+    echo "  Players: $(count_connected_players)"
+    echo "  Server: ${SERVER_NAME}"
+    echo "  World: ${WORLD_NAME}"
+    echo "  Port: ${PORT}"
+  fi
 }
