@@ -33,7 +33,7 @@ A resilient, production-ready Bash management script for running a **Valheim Ded
 Before using this management script, you must install:
 
 -   Linux server (Ubuntu/Debian recommended)
--   SteamCMD
+-   SteamCMD (can be installed via package manager or manual download)
 -   Valheim Dedicated Server (AppID 896660)
 -   Required system libraries (for Ubuntu/Debian):
     - `lib32gcc-s1` (for 32-bit compatibility)
@@ -62,6 +62,10 @@ For Ubuntu/Debian systems, install the required libraries:
 
 Ubuntu / Debian:
 
+    sudo apt update
+    sudo apt install software-properties-common
+    sudo add-apt-repository multiverse
+    sudo dpkg --add-architecture i386
     sudo apt update
     sudo apt install steamcmd
 
