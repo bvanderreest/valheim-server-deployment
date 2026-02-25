@@ -123,10 +123,10 @@ This project consists of four modular files:
 
     Create a `.env` file in the same directory with your server settings. This file will feed into `config.conf` and provide defaults in case it doesn't exist.
 
-    Copy the `.env.example` file to `.env` and customize it with your server settings:
+    Copy the `env.example` file to `.env` and customize it with your server settings:
     
     ```bash
-    cp .env.example .env
+    cp env.example .env
     ```
 
     ```bash
