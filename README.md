@@ -97,7 +97,8 @@ Inside SteamCMD:
 This project consists of four modular files:
 
 - **config.conf** — Core configuration (server name, ports, paths, backup, SteamCMD settings)
-- **modifiers.conf** — Game modifiers and presets (easily customizable gameplay rules)
+- **modifiers-base.conf** — Game modifiers and presets (easily customizable gameplay rules)
+- **modifiers-user.conf** — User-specific modifier settings (not updated with releases)
 - **helpers.sh** — Reusable helper functions (ensure_paths, build_args, is_running, guard_world)
 - **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
 - **valheim-monitor.sh** — Standalone monitoring script for external use
@@ -112,50 +113,75 @@ This project consists of four modular files:
 ## 📦 Deployment
 
 1.  **Copy all files to your server:**
-
+ 
         config.conf
-        modifiers.conf
+        modifiers-base.conf
+        modifiers-user.conf
         helpers.sh
         valheim-server-manager.sh
         valheim-monitor.sh
 
 2.  **Create a `.env` file for client-side configurations:**
-
+ 
     Create a `.env` file in the same directory with your server settings. This file will feed into `config.conf` and provide defaults in case it doesn't exist.
-
+ 
     Copy the `env.example` file to `.env` and customize it with your server settings:
     
     ```bash
     cp env.example .env
     ```
-
+    
     ```bash
     SERVER_NAME="My Valheim Server"
     WORLD_NAME="MyWorld"
     PASSWORD="serverpassword123"
-
+ 
     # Password Requirements:
     # - Minimum 5 characters
     # - Cannot contain or match the world name
     ```
-
+ 
 3.  **Customize `config.conf` for your server setup:**
-
+ 
     The `config.conf` file now reads from `.env` with defaults. You can still customize it directly, but it's recommended to use `.env` for client-side configurations.
-
-4.  **(Optional) Customize `modifiers.conf` for gameplay rules:**
-
+ 
+4.  **(Optional) Customize `modifiers-user.conf` for gameplay rules:**
+ 
+    The modifier system has been split into two files:
+    - `modifiers-base.conf` - Base modifier definitions (updated with releases)
+    - `modifiers-user.conf` - User-specific settings (not updated with releases)
+ 
+    ```bash
+    ## First, select your desired customization level
+    DEFAULT_MODIFIER_GROUP="standard"  # or "basic", "preset", "hardcore", "custom"
+    
+    ## Then configure specific settings
+    PRESET="normal"  # or casual, easy, normal, hard, hardcore, immersive, hammer
+    # BASIC_MODIFIERS=( "Combat=hard" "Resources=less" ... )
+    # ADVANCED_MODIFIERS=( "EnemyLevelUpRate=120" ... )
+    # EXPERT_MODIFIERS=( "EnemySpeedSize=150" ... )
+    # SETKEYS=( "nomap" ... )
+    ```
+ 
     ```bash
     ## First, select your desired customization level
     DEFAULT_MODIFIER_GROUP="standard"  # or "basic", "preset", "hardcore", "custom"
     
     ## Then configure specific settings
     PRESET="Easy"  # or Normal, Hard, Hardcore, etc.
-    MODIFIERS=( "Combat=hard" "Resources=less" ... )
-    SETKEYS=( "nomap" ... )
+    # MODIFIERS=( "Combat=hard" "Resources=less" ... )
+    # SETKEYS=( "nomap" ... )
     ```
-
-For detailed information about the enhanced modifier system, please refer to the [MODIFIERS.md](MODIFIERS.md) file.
+ 
+ For detailed information about the enhanced modifier system, please refer to the [MODIFIERS.md](MODIFIERS.md) file.
+ 
+ ## Modifier System Overview
+ 
+ The modifier system has been restructured to provide better usability:
+ 1. **First, select your customization level** - Choose from preset, standard, hardcore, or custom
+ 2. **Then configure specific settings** - Modify presets, modifiers, and setkeys as needed
+ 
+ This upfront selection makes it easier to understand what configuration options are available before diving into details.
 
 ## New "Preset" Modifier Group
 
@@ -176,6 +202,16 @@ All paths are configured in `config.conf`. Adjust as needed:
     SAVEDIR="/srv/valheim/worlds"
     LOG_DIR="/srv/valheim/logs"
     BACKUP_DIR="/srv/valheim/backups"
+
+### Server Directory Configuration
+
+The `SERVER_DIR` can be configured for different installation methods:
+
+- **Standard Steam Installation:** `/home/steam/valheim/valheim_server`
+- **Snap Installation:** `/home/{USER}/snap/steam/common/.local/share/Steam/steamapps/common/Valheim dedicated server`
+- **Custom Installation:** Specify your own path
+
+The script will use the path defined in `SERVER_DIR` or default to `/home/steam/valheim_server` if not set.
 
 ### Server Directory Configuration
 

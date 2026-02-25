@@ -3,9 +3,9 @@
 # Environment files
 .env
 .env.*
-
-# Log files
-*.log
+ 
+# Modifier configuration files
+modifiers-user.conf
 
 # Backup files
 *.bak

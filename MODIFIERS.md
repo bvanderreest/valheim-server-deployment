@@ -19,7 +19,12 @@ The enhanced modifier system separates modifiers into three tiers:
 
 ## Configuration File Structure
 
-The `modifiers.conf` file contains all modifier settings organized by tier:
+The `modifiers.conf` file has been split into two files for better version control:
+
+1. **modifiers-base.conf** - Contains base modifier definitions that should be updated with new releases
+2. **modifiers-user.conf** - Contains user-specific settings that should NOT be updated with new releases
+
+The `modifiers-base.conf` file contains all modifier settings organized by tier:
 
 ### Preset Difficulty
 ```bash

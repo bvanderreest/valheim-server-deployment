@@ -50,6 +50,15 @@ set_modifier_group() {
 }
 
 build_args() {
+  # Source base configuration first
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  source "${script_dir}/modifiers-base.conf"
+  
+  # Source user configuration if it exists
+  if [[ -f "${script_dir}/modifiers-user.conf" ]]; then
+    source "${script_dir}/modifiers-user.conf"
+  fi
+  
   # Set modifier group variables based on DEFAULT_MODIFIER_GROUP
   set_modifier_group
   
