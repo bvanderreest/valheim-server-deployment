@@ -35,6 +35,14 @@ Before using this management script, you must install:
 -   Linux server (Ubuntu/Debian recommended)
 -   SteamCMD
 -   Valheim Dedicated Server (AppID 896660)
+-   Required system libraries (for Ubuntu/Debian):
+    - `lib32gcc-s1` (for 32-bit compatibility)
+    - `libpulse0` (for audio support)
+    - `libatomic1` (for atomic operations)
+    - `libc6` (for core system functions)
+    - `libstdc++6` (for C++ standard library)
+
+------------------------------------------------------------------------
 
 ------------------------------------------------------------------------
 
@@ -43,7 +51,14 @@ Before using this management script, you must install:
 Official documentation:
 https://valheim.fandom.com/wiki/Valheim_Dedicated_Server
 
-## 1️⃣ Install SteamCMD
+## 1️ - Install Required System Libraries
+
+For Ubuntu/Debian systems, install the required libraries:
+
+    sudo apt update
+    sudo apt install lib32gcc-s1 libpulse0 libatomic1 libc6 libstdc++6
+
+## 2️ - Install SteamCMD
 
 Ubuntu / Debian:
 
@@ -56,7 +71,7 @@ Verify installation:
 
 ------------------------------------------------------------------------
 
-## 2️⃣ Install Valheim Dedicated Server
+## 3 - Install Valheim Dedicated Server
 
 Launch SteamCMD:
 
@@ -65,7 +80,7 @@ Launch SteamCMD:
 Inside SteamCMD:
 
     login anonymous
-    force_install_dir /home/valheim/server
+    force_install_dir /home/{USER}/server
     app_update 896660 validate
     quit
 
