@@ -100,19 +100,31 @@ This project consists of four modular files:
         valheim-server-manager.sh
         valheim-monitor.sh
 
-2.  **Customize `config.conf` for your server setup:**
+2.  **Create a `.env` file for client-side configurations:**
+
+    Create a `.env` file in the same directory with your server settings. This file will feed into `config.conf` and provide defaults in case it doesn't exist.
+
+    Copy the `.env.example` file to `.env` and customize it with your server settings:
+    
+    ```bash
+    cp .env.example .env
+    ```
 
     ```bash
-    SERVER_NAME="Your Server Name"
-    WORLD_NAME="YourWorld"
-    PASSWORD="YourPassword"
+    SERVER_NAME="My Valheim Server"
+    WORLD_NAME="MyWorld"
+    PASSWORD="serverpassword123"
 
     # Password Requirements:
     # - Minimum 5 characters
     # - Cannot contain or match the world name
     ```
 
-3.  **(Optional) Customize `modifiers.conf` for gameplay rules:**
+3.  **Customize `config.conf` for your server setup:**
+
+    The `config.conf` file now reads from `.env` with defaults. You can still customize it directly, but it's recommended to use `.env` for client-side configurations.
+
+4.  **(Optional) Customize `modifiers.conf` for gameplay rules:**
 
     ```bash
     ## First, select your desired customization level
@@ -293,6 +305,10 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+# 🛡 Security & Version Control
+
+Sensitive configuration data should never be committed to version control. The `.env` file is automatically excluded from Git by the included `.gitignore` file. Always create your own `.env` file with your specific server settings and keep it private.
 
 ------------------------------------------------------------------------
 
