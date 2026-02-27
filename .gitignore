@@ -6,6 +6,7 @@
  
 # Modifier configuration files
 modifiers-user.conf
+modifiers.conf
 
 # Backup files
 *.bak

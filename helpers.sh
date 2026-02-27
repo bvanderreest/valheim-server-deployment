@@ -50,11 +50,8 @@ set_modifier_group() {
 }
 
 build_args() {
-  # Source base configuration first
-  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  source "${script_dir}/modifiers-base.conf"
-  
   # Check if modifiers.conf exists, if not, create it from the example
+  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   if [[ ! -f "${script_dir}/modifiers.conf" ]]; then
     if [[ -f "${script_dir}/modifiers.example.conf" ]]; then
       cp "${script_dir}/modifiers.example.conf" "${script_dir}/modifiers.conf"
