@@ -94,17 +94,17 @@ Inside SteamCMD:
 
 ## 📂 File Structure
 
-This project consists of four modular files:
+This project consists of three modular files:
 
 - **config.conf** — Core configuration (server name, ports, paths, backup, SteamCMD settings)
 - **modifiers-base.conf** — Game modifiers and presets (easily customizable gameplay rules)
-- **modifiers-user.conf** — User-specific modifier settings (not updated with releases)
+- **modifiers.conf** — User-specific modifier settings (not updated with releases)
 - **helpers.sh** — Reusable helper functions (ensure_paths, build_args, is_running, guard_world)
 - **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
 - **valheim-monitor.sh** — Standalone monitoring script for external use
 
 ### Benefits of This Architecture
-- **Easy Configuration** — Update settings in `config.conf` or `modifiers.conf` without touching script logic
+- **Easy Configuration** — Update settings in `config.conf` or `modifiers-user.conf` without touching script logic
 - **Focused Files** — Game modifiers separated for easy experimentation and version control
 - **Reusable Helpers** — Functions in `helpers.sh` can be sourced by other scripts if needed
 - **Clean Separation** — Clear organization of concerns (config, modifiers, utilities, commands)
@@ -145,11 +145,13 @@ This project consists of four modular files:
  
     The `config.conf` file now reads from `.env` with defaults. You can still customize it directly, but it's recommended to use `.env` for client-side configurations.
  
-4.  **(Optional) Customize `modifiers-user.conf` for gameplay rules:**
+4.  **(Optional) Customize `modifiers.conf` for gameplay rules:**
  
-    The modifier system has been split into two files:
-    - `modifiers-base.conf` - Base modifier definitions (updated with releases)
-    - `modifiers-user.conf` - User-specific settings (not updated with releases)
+    The modifier system uses a single file:
+    - `modifiers.conf` - User-specific modifier settings (not updated with releases)
+ 
+    When you first run the manager, `modifiers.conf` will be automatically created from `modifiers.example.conf`.
+    Edit `modifiers.conf` to adjust settings to your preferences.
  
     ```bash
     ## First, select your desired customization level
@@ -160,16 +162,6 @@ This project consists of four modular files:
     # BASIC_MODIFIERS=( "Combat=hard" "Resources=less" ... )
     # ADVANCED_MODIFIERS=( "EnemyLevelUpRate=120" ... )
     # EXPERT_MODIFIERS=( "EnemySpeedSize=150" ... )
-    # SETKEYS=( "nomap" ... )
-    ```
- 
-    ```bash
-    ## First, select your desired customization level
-    DEFAULT_MODIFIER_GROUP="standard"  # or "basic", "preset", "hardcore", "custom"
-    
-    ## Then configure specific settings
-    PRESET="Easy"  # or Normal, Hard, Hardcore, etc.
-    # MODIFIERS=( "Combat=hard" "Resources=less" ... )
     # SETKEYS=( "nomap" ... )
     ```
  
@@ -187,7 +179,7 @@ This project consists of four modular files:
 
 A new "preset" modifier group has been added that allows you to use only the preset configuration without any additional modifiers (basic, advanced, or expert). To use this option:
 
-1. Set `DEFAULT_MODIFIER_GROUP="preset"` in `modifiers.conf`
+1. Set `DEFAULT_MODIFIER_GROUP="preset"` in `modifiers-user.conf`
 2. Or manually configure the following settings:
    - `ENABLE_BASIC_MODIFIERS=false`
    - `ENABLE_ADVANCED_MODIFIERS=false`

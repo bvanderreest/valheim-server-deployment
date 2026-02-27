@@ -19,10 +19,9 @@ The enhanced modifier system separates modifiers into three tiers:
 
 ## Configuration File Structure
 
-The `modifiers.conf` file has been split into two files for better version control:
+The `modifiers.conf` file is now a single file for easier management:
 
-1. **modifiers-base.conf** - Contains base modifier definitions that should be updated with new releases
-2. **modifiers-user.conf** - Contains user-specific settings that should NOT be updated with new releases
+1. **modifiers.conf** - Contains user-specific modifier settings that should NOT be updated with new releases
 
 The `modifiers-base.conf` file contains all modifier settings organized by tier:
 
@@ -407,6 +406,9 @@ Boolean setkeys that act as toggles for various features:
 The "preset" modifier group allows you to use only the preset configuration without any additional modifiers (basic, advanced, or expert). To use this option:
 
 1. Set `DEFAULT_MODIFIER_GROUP="preset"` in `modifiers.conf`
+
+When you first run the manager, `modifiers.conf` will be automatically created from `modifiers.example.conf`.
+You can then customize `modifiers.conf` to your preferences without worrying about it being overwritten during deployments.
 
 ## Improved Configuration Structure
 

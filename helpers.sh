@@ -54,10 +54,19 @@ build_args() {
   local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   source "${script_dir}/modifiers-base.conf"
   
-  # Source user configuration if it exists
-  if [[ -f "${script_dir}/modifiers-user.conf" ]]; then
-    source "${script_dir}/modifiers-user.conf"
+  # Check if modifiers.conf exists, if not, create it from the example
+  if [[ ! -f "${script_dir}/modifiers.conf" ]]; then
+    if [[ -f "${script_dir}/modifiers.example.conf" ]]; then
+      cp "${script_dir}/modifiers.example.conf" "${script_dir}/modifiers.conf"
+      echo "Created modifiers.conf from modifiers.example.conf. Please customize settings in modifiers.conf." >&2
+    else
+      echo "Error: Neither modifiers.conf nor modifiers.example.conf found!" >&2
+      exit 1
+    fi
   fi
+  
+  # Source user configuration
+  source "${script_dir}/modifiers.conf"
   
   # Set modifier group variables based on DEFAULT_MODIFIER_GROUP
   set_modifier_group
