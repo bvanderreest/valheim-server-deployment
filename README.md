@@ -318,6 +318,29 @@ Allows Steam + Xbox cross-platform support.
     ├── backups/
     └── valheim.pid
 
+## 🔐 Directory Permissions
+
+For optimal security and functionality, the following directory permissions are recommended:
+
+- **/srv/valheim/**: Owner `valheim:valheim`, permissions `755`
+- **/srv/valheim/worlds/**: Owner `valheim:valheim`, permissions `755`
+- **/srv/valheim/logs/**: Owner `valheim:valheim`, permissions `755`
+- **/srv/valheim/backups/**: Owner `valheim:valheim`, permissions `755`
+
+To set these permissions:
+```bash
+sudo mkdir -p /srv/valheim/{worlds,logs,backups}
+sudo chown -R valheim:valheim /srv/valheim
+sudo chmod -R 755 /srv/valheim
+```
+
+The `valheim` user should be created with:
+```bash
+sudo useradd -r -m -U -d /srv/valheim valheim
+```
+
+This ensures the server process can read and write to all necessary directories while maintaining proper security isolation.
+
 ------------------------------------------------------------------------
 
 # 🔐 Security Recommendations
