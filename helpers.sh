@@ -112,3 +112,36 @@ get_server_info() {
   echo "Uptime: $(format_uptime $uptime)"
   echo "Players: $players"
 }
+
+get_join_code() {
+  # Extract join code from server logs
+  if [ ! -f "${LOGFILE}" ]; then
+    echo ""
+    return
+  fi
+  
+  # Look for the line that contains the join code
+  local join_code
+  join_code=$(grep -oE "Session [^ ]+ with join code [0-9]+ and IP [0-9.]+:[0-9]+ is active" "${LOGFILE}" | tail -1 | grep -oE "[0-9]+$" 2>/dev/null || echo "")
+  
+  if [ -n "${join_code}" ]; then
+    echo "${join_code}"
+  else
+    # Try alternative pattern for join code extraction
+    join_code=$(grep -oE "join code [0-9]+" "${LOGFILE}" | tail -1 | grep -oE "[0-9]+$" 2>/dev/null || echo "")
+    echo "${join_code}"
+  fi
+}
+
+get_server_ip_from_logs() {
+  # Extract server IP from logs
+  if [ ! -f "${LOGFILE}" ]; then
+    echo ""
+    return
+  fi
+  
+  # Look for the IP address in the logs
+  local ip
+  ip=$(grep -oE "Session [^ ]+ with join code [0-9]+ and IP [0-9.]+:[0-9]+ is active" "${LOGFILE}" | tail -1 | grep -oE "[0-9.]+:[0-9]+" | cut -d':' -f1 2>/dev/null || echo "")
+  echo "${ip}"
+}

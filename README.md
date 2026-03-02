@@ -1,234 +1,97 @@
-# 🛡 Valheim Dedicated Server Manager
+# Valheim Server Deployment
 
-A resilient, production-ready Bash management script for running a
-**Valheim Dedicated Server** on Linux.
+This is a complete deployment script for a Valheim dedicated server with automated backup functionality.
 
-This project provides clean lifecycle management, SteamCMD updates,
-automatic world backups, crash recovery, and configurable gameplay
-modifiers --- split across four modular files for clean separation
-of configuration, helpers, and commands.
+## Features
 
-------------------------------------------------------------------------
+- Server management (start, stop, restart, stats, logs, update, backup)
+- Automated backup system with systemd timer
+- Join code extraction from server logs
+- Connected players tracking
 
-## ✨ Features
+## Setup Instructions
 
--   ✅ Start / Stop / Restart / Status commands
--   📦 SteamCMD auto-update support (AppID 896660)
--   💾 Automated rotating world backups
--   ⚡ Power-loss world corruption guard + restore
--   🌍 Crossplay support (PlayFab relay)
--   📜 Log management
--   🛠 Fully configurable paths and settings
+### 1. Configure the server
 
-------------------------------------------------------------------------
+Edit `config.conf` to set your server parameters:
 
-## 📋 Prerequisites
+```bash
+# Server configuration
+SERVER_NAME="My Valheim Server"
+WORLD_NAME="MyWorld"
+PASSWORD="serverpassword"
+PORT=2456
+PUBLIC=1
+CROSSPLAY=true
+```
 
-Before using this management script, you must install:
+### 2. Set up automated backups
 
--   Linux server (Ubuntu/Debian recommended)
--   SteamCMD
--   Valheim Dedicated Server (AppID 896660)
+To enable automated backups using systemd timers:
 
-------------------------------------------------------------------------
+```bash
+# Copy the service and timer files to systemd directory
+sudo cp valheim-backup.service /etc/systemd/system/
+sudo cp valheim-backup.timer /etc/systemd/system/
 
-# 🚀 Installing Valheim Dedicated Server
+# Reload systemd
+sudo systemctl daemon-reload
 
-Official documentation:
-https://valheim.fandom.com/wiki/Valheim_Dedicated_Server
+# Enable and start the timer
+sudo systemctl enable valheim-backup.timer
+sudo systemctl start valheim-backup.timer
 
-## 1️⃣ Install SteamCMD
+# Check status
+sudo systemctl status valheim-backup.timer
+```
 
-Ubuntu / Debian:
+### 3. Manual backup
 
-    sudo apt update
-    sudo apt install steamcmd
+To create a backup manually:
 
-Verify installation:
+```bash
+./valheim-server-manager.sh backup
+```
 
-    steamcmd
+### 4. Check server status
 
-------------------------------------------------------------------------
+```bash
+./valheim-server-manager.sh stats
+```
 
-## 2️⃣ Install Valheim Dedicated Server
+## Functions
 
-Launch SteamCMD:
+### Server Management
+- `start` - Start the server
+- `stop` - Stop the server
+- `restart` - Restart the server
+- `stats` - Show server statistics including join code
+- `logs` - Show server logs
+- `update` - Update the server
+- `backup` - Create a backup
 
-    steamcmd
+### Backup Automation
+The backup automation system:
+- Creates backups daily using systemd timer
+- Keeps only the most recent backups (configurable)
+- Works with running or stopped servers
+- Automatically cleans up old backups
 
-Inside SteamCMD:
+## Join Code Extraction
 
-    login anonymous
-    force_install_dir /home/valheim/server
-    app_update 896660 validate
-    quit
+The `get_join_code()` function in `helpers.sh` extracts the join code from server logs. The join code appears in logs like:
+```
+Session MyWorld with join code 123456 and IP 192.168.1.100:2456 is active
+```
 
-------------------------------------------------------------------------
+## Connected Players Tracking
 
-# ⚙️ Setup This Manager Script
+The `count_connected_players()` function tracks connected players by parsing server logs for connection/disconnection events.
 
-## 📂 File Structure
+## Requirements
 
-This project consists of four modular files:
-
-- **config.conf** — Core configuration (server name, ports, paths, backup, SteamCMD settings)
-- **modifiers.conf** — Game modifiers and presets (easily customizable gameplay rules)
-- **helpers.sh** — Reusable helper functions (ensure_paths, build_args, is_running, guard_world)
-- **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
-
-### Benefits of This Architecture
-- **Easy Configuration** — Update settings in `config.conf` or `modifiers.conf` without touching script logic
-- **Focused Files** — Game modifiers separated for easy experimentation and version control
-- **Reusable Helpers** — Functions in `helpers.sh` can be sourced by other scripts if needed
-- **Clean Separation** — Clear organization of concerns (config, modifiers, utilities, commands)
-- **Maintainable** — Each file has a single, clear responsibility
-
-## 📦 Deployment
-
-1.  Copy all four files to your server:
-
-        config.conf
-        modifiers.conf
-        helpers.sh
-        valheim-server-manager.sh
-
-2.  Customize `config.conf` for your server setup:
-
-    SERVER_NAME="Your Server Name"
-    WORLD_NAME="YourWorld"
-    PASSWORD="YourPassword"
-
-    **Password Requirements:**
-    - Minimum 5 characters
-    - Cannot contain or match the world name
-
-3.  (Optional) Customize `modifiers.conf` for gameplay rules:
-
-    PRESET="Easy"  # or Normal, Hard, Hardcore, etc.
-    MODIFIERS=( "Combat=hard" "Resources=less" ... )
-    SETKEYS=( "nomap" ... )
-
-## Important Paths
-
-All paths are configured in `config.conf`. Adjust as needed:
-
-    SERVER_DIR="/path/to/valheim"
-    SAVEDIR="/srv/valheim/worlds"
-    LOG_DIR="/srv/valheim/logs"
-    BACKUP_DIR="/srv/valheim/backups"
-
-### Server Directory Configuration
-
-The `SERVER_DIR` can be configured for different installation methods:
-
-- **Standard Steam Installation:** `/home/steam/valheim/valheim_server`
-- **Snap Installation:** `/home/vdrvalheim/snap/steam/common/.local/share/Steam/steamapps/common/Valheim dedicated server`
-- **Custom Installation:** Specify your own path
-
-The script will use the path defined in `SERVER_DIR` or default to `/home/steam/valheim/valheim_server` if not set.
-
-## Make Executable
-
-    chmod +x valheim-server-manager.sh config.conf helpers.sh modifiers.conf
-
-------------------------------------------------------------------------
-
-# 🎮 Usage
-
-    ./valheim-server-manager.sh start
-    ./valheim-server-manager.sh stop
-    ./valheim-server-manager.sh restart
-    ./valheim-server-manager.sh status
-    ./valheim-server-manager.sh logs
-    ./valheim-server-manager.sh update
-    ./valheim-server-manager.sh backup
-
-------------------------------------------------------------------------
-
-# 🔄 Automatic Updates
-
-If enabled in `config.conf`:
-
-    USE_STEAMCMD_UPDATE=true
-
-Run:
-
-    ./valheim-server-manager.sh update
-
-This will: - Stop server - Update via SteamCMD - Validate installation
-
-------------------------------------------------------------------------
-
-# 💾 Backup & Recovery
-
-### Automatic Backups
-
-Uses official server flags:
-
--   -backups
--   -backupshort
--   -backuplong
--   -saveinterval
-
-Backups stored as:
-
-    world-<WORLD_NAME>-<timestamp>.tar.gz
-
-### Corruption Guard
-
-On start:
-
--   Checks for missing or zero-sized `.db` / `.fwl`
--   Restores most recent backup automatically
-
-Designed for resilience after: - Power loss - VM crashes - Forced
-shutdowns
-
-------------------------------------------------------------------------
-
-# 🌍 Crossplay Support
-
-Enable in `config.conf`:
-
-    CROSSPLAY=true
-
-Adds:
-
-    -crossplay
-
-Allows Steam + Xbox cross-platform support.
-
-------------------------------------------------------------------------
-
-# 📁 Recommended Directory Structure
-
-    /srv/valheim/
-    ├── worlds/
-    ├── logs/
-    ├── backups/
-    └── valheim.pid
-
-------------------------------------------------------------------------
-
-# 🔐 Security Recommendations
-
--   Run under dedicated `valheim` user
--   Do not run as root
--   Open ports 2456 and 2457
--   Use firewall rules appropriately
-
-------------------------------------------------------------------------
-
-# 📜 License
-
-MIT (or your preferred license)
-
-------------------------------------------------------------------------
-
-# 🙌 Built For Homelab Operators
-
-Designed for self-hosted environments requiring:
-
--   High uptime
--   Backup resilience
--   Simple operational control
+- Bash 4+
+- curl
+- tar
+- pv (optional, for progress indication during backup)
+- systemd (for automated backups)

@@ -1,0 +1,10 @@
+[Unit]
+Description=Valheim Server Backup Timer
+Requires=valheim-backup.service
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
