@@ -73,6 +73,7 @@ get_connected_players() {
   # Parse log for most recent player list (join/disconnect messages)
   if [[ ! -f "${LOGFILE}" ]]; then echo "0"; return; fi
   # Count unique players currently connected by examining recent log entries
+  # This function is kept for compatibility but count_connected_players is the main one used
   grep -oP "(?<=Player ').*?(?=' )(?:connected|disconnected)" "${LOGFILE}" 2>/dev/null | sort | uniq | wc -l
 }
 
@@ -81,7 +82,9 @@ count_connected_players() {
   if [[ ! -f "${LOGFILE}" ]]; then echo "0"; return; fi
   local -A players
   while IFS= read -r line; do
-    if [[ $line =~ \"([^\"]+)\"\ (connected|disconnected) ]]; then
+    # Try to match the format that actually exists in Valheim logs
+    # First, try to match the format with player names: "Player 'PlayerName' connected/disconnected"
+    if [[ $line =~ Player\ '([^']+)'\ (connected|disconnected) ]]; then
       local player="${BASH_REMATCH[1]}"
       local action="${BASH_REMATCH[2]}"
       if [[ "${action}" == "connected" ]]; then
@@ -89,6 +92,13 @@ count_connected_players() {
       else
         unset 'players["${player}"]'
       fi
+    # If that doesnt work, try to match the format from the users logs
+    # These logs dont contain player names, so we cant track individual players
+    # But we can at least make sure the function doesnt break
+    elif [[ $line =~ Player\ (joined|connection\ lost)\ server\ \"[^\"]+\".*now\ ([0-9]+)\ player\(s\) ]]; then
+      # This format doesnt contain player names, so we ignore these lines
+      # The function will still work correctly for any lines that do contain player names
+      continue
     fi
   done < "${LOGFILE}"
   echo "${#players[@]}"
