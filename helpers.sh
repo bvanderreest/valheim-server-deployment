@@ -92,11 +92,11 @@ count_connected_players() {
       else
         unset 'players["${player}"]'
       fi
-    # If that doesnt work, try to match the format from the users logs
-    # These logs dont contain player names, so we cant track individual players
-    # But we can at least make sure the function doesnt break
+    # If that doesn't work, try to match the format from the user's logs
+    # These logs don't contain player names, so we can't track individual players
+    # But we can at least make sure the function doesn't break
     elif [[ $line =~ Player\ (joined|connection\ lost)\ server\ \"[^\"]+\".*now\ ([0-9]+)\ player\(s\) ]]; then
-      # This format doesnt contain player names, so we ignore these lines
+      # This format doesn't contain player names, so we ignore these lines
       # The function will still work correctly for any lines that do contain player names
       continue
     fi
