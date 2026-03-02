@@ -1,17 +1,46 @@
-# Valheim Server Deployment
+# 🏰 Valheim Server Deployment & Management
 
-This is a complete deployment script for a Valheim dedicated server with automated backup functionality.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/your-repo/valheim-server-deployment/blob/main/LICENSE)
+[![Gitea](https://img.shields.io/badge/Hosted-Gitea-blue)](https://your-gitea-url.com/your-repo/valheim-server-deployment)
+[![Valheim](https://img.shields.io/badge/Valheim-Server-orange)](https://www.valheimgame.com/)
 
-## Features
+A complete, robust, and user-friendly deployment solution for running your own **Valheim** dedicated server with automated backup functionality and advanced management features.
 
-- Server management (start, stop, restart, stats, logs, update, backup)
-- Automated backup system with systemd timer
-- Join code extraction from server logs
-- Connected players tracking
+## 🚀 Features
 
-## Setup Instructions
+- **Complete Server Management** - Start, stop, restart, update, and monitor your Valheim server
+- **Automated Backup System** - Daily backups with systemd timer integration
+- **Smart Backup Management** - Automatic cleanup of old backups with configurable retention
+- **Join Code Extraction** - Automatically extract and display your server's join code
+- **Player Tracking** - Real-time connected players monitoring
+- **Uptime Monitoring** - Track server uptime and performance metrics
+- **Power Loss Resilience** - Automatically recovers from unexpected shutdowns
+- **SteamCMD Integration** - Easy server updates with SteamCMD
+- **Crossplay Support** - Enable crossplay for your server
+- **Customizable World Settings** - Configure server name, port, password, and more
 
-### 1. Configure the server
+## 📦 Requirements
+
+Before you begin, ensure you have:
+
+- **Linux** (Ubuntu/Debian/CentOS recommended)
+- **Bash 4+**
+- **curl**
+- **tar**
+- **pv** (optional, for progress indication during backup)
+- **systemd** (for automated backups)
+- **SteamCMD** (for server updates)
+
+## 🛠️ Installation & Setup
+
+### 1. Clone the Repository
+
+```bash
+git clone https://your-gitea-url.com/your-repo/valheim-server-deployment.git
+cd valheim-server-deployment
+```
+
+### 2. Configure Your Server
 
 Edit `config.conf` to set your server parameters:
 
@@ -23,9 +52,32 @@ PASSWORD="serverpassword"
 PORT=2456
 PUBLIC=1
 CROSSPLAY=true
+
+# SteamCMD settings (for updates)
+STEAM_LOGIN="anonymous"
+USE_STEAMCMD_UPDATE=true
+STEAMCMD_BIN="/usr/games/steamcmd"
+
+# Server paths
+SERVER_DIR="/home/valheim/valheim"
+SAVEDIR="/home/valheim/saves"
+LOG_DIR="/home/valheim/logs"
+BACKUP_DIR="/home/valheim/backups"
+PIDFILE="/home/valheim/valheim.pid"
+
+# Backup settings
+BACKUPS_KEEP=7
+BACKUP_SHORT=1
+BACKUP_LONG=7
+
+# Advanced settings
+SAVE_INTERVAL=300
+MODIFIERS=()
+PRESET=""
+SETKEYS=()
 ```
 
-### 2. Set up automated backups
+### 3. Set Up Automated Backups
 
 To enable automated backups using systemd timers:
 
@@ -45,53 +97,177 @@ sudo systemctl start valheim-backup.timer
 sudo systemctl status valheim-backup.timer
 ```
 
-### 3. Manual backup
+## 🎮 Usage Commands
 
-To create a backup manually:
+### Server Management
 
 ```bash
+# Start the server
+./valheim-server-manager.sh start
+
+# Stop the server
+./valheim-server-manager.sh stop
+
+# Restart the server
+./valheim-server-manager.sh restart
+
+# Show server statistics
+./valheim-server-manager.sh stats
+
+# View server logs
+./valheim-server-manager.sh logs
+
+# Update the server
+./valheim-server-manager.sh update
+
+# Create a manual backup
 ./valheim-server-manager.sh backup
 ```
 
-### 4. Check server status
+### Server Status Example
 
 ```bash
-./valheim-server-manager.sh stats
+$ ./valheim-server-manager.sh stats
+═══════════════════════════════════════════════════════
+  Valheim Server Stats — My Valheim Server
+═══════════════════════════════════════════════════════
+
+Status:           RUNNING (PID 12345)
+Uptime:           2h 30m
+
+World:            MyWorld
+Connected:        3 player(s)
+
+Connect:
+  Join Code:      123456
+  Server:         192.168.1.100
+  Password:       serverpassword
+
+Configuration:
+  Public:         Yes
+  Crossplay:      true
+
+Storage:
+  World DB:       12.5M (/home/valheim/saves/MyWorld.db)
+  Backups:        3 file(s)
+
+═══════════════════════════════════════════════════════
 ```
 
-## Functions
+## 📦 Backup System
 
-### Server Management
-- `start` - Start the server
-- `stop` - Stop the server
-- `restart` - Restart the server
-- `stats` - Show server statistics including join code
-- `logs` - Show server logs
-- `update` - Update the server
-- `backup` - Create a backup
+### Automated Backups
 
-### Backup Automation
 The backup automation system:
 - Creates backups daily using systemd timer
 - Keeps only the most recent backups (configurable)
 - Works with running or stopped servers
 - Automatically cleans up old backups
+- Shows progress indication during backup creation
 
-## Join Code Extraction
+### Manual Backups
 
-The `get_join_code()` function in `helpers.sh` extracts the join code from server logs. The join code appears in logs like:
+To create a backup manually:
+```bash
+./valheim-server-manager.sh backup
 ```
-Session MyWorld with join code 123456 and IP 192.168.1.100:2456 is active
+
+### Backup Retention
+
+Configure backup retention in `config.conf`:
+```bash
+BACKUPS_KEEP=7    # Keep 7 most recent backups
+BACKUP_SHORT=1    # Create short backup daily
+BACKUP_LONG=7     # Create long backup weekly
 ```
 
-## Connected Players Tracking
+## 🛡️ Advanced Features
 
-The `count_connected_players()` function tracks connected players by parsing server logs for connection/disconnection events.
+### Crossplay Support
 
-## Requirements
+Enable crossplay by setting `CROSSPLAY=true` in `config.conf` to allow players from different platforms to join your server.
 
-- Bash 4+
-- curl
-- tar
-- pv (optional, for progress indication during backup)
-- systemd (for automated backups)
+### Modifiers Configuration
+
+You can configure server modifiers in `config.conf`:
+```bash
+MODIFIERS=("difficulty=2" "pvp=true" "daylight=1")
+```
+
+### Custom Presets
+
+Set a custom preset for your world:
+```bash
+PRESET="custom_preset"
+```
+
+### Server Settings
+
+Configure server settings using SETKEYS:
+```bash
+SETKEYS=("server_name=My Server" "server_description=Join my server!")
+```
+
+## 📊 Monitoring & Troubleshooting
+
+### Check Server Status
+
+```bash
+./valheim-server-manager.sh stats
+```
+
+### View Logs
+
+```bash
+./valheim-server-manager.sh logs
+```
+
+### Server Health Check
+
+The system automatically:
+- Checks if the server is running
+- Tracks connected players
+- Monitors server uptime
+- Recovers from power loss
+- Extracts join codes from logs
+
+### Common Issues
+
+1. **Server won't start**: Check that SteamCMD is properly installed and the server directory has correct permissions
+2. **Backup fails**: Ensure backup directory has sufficient disk space and correct permissions
+3. **Join code not showing**: Wait for server to fully start and check logs for connection messages
+4. **Permission denied**: Make sure all scripts are executable (`chmod +x *.sh`)
+
+## 📁 File Structure
+
+```
+valheim-server-deployment/
+├── config.conf              # Server configuration
+├── valheim-server-manager.sh # Main server manager script
+├── helpers.sh               # Helper functions
+├── backup-automation.sh     # Backup automation script
+├── valheim-backup.service   # Systemd service for backups
+├── valheim-backup.timer     # Systemd timer for backups
+├── README.md                # This file
+└── README_MODIFIERS.md      # Modifier documentation
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- Thanks to the Valheim community for their support
+- Inspired by various server deployment scripts and best practices
+- Uses SteamCMD for server updates
+
+## 🎮 Valheim Logo
+
+![Valheim Logo](https://upload.wikimedia.org/wikipedia/en/4/4d/Valheim_logo.png)
+
+*Valheim Server Deployment Project*
