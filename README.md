@@ -31,6 +31,62 @@ Before you begin, ensure you have:
 - **systemd** (for automated backups)
 - **SteamCMD** (for server updates)
 
+## 🎮 Installing Valheim Server via SteamCMD
+
+Before you can run your Valheim server, you need to install the server files using SteamCMD. Follow these steps:
+
+### 1. Install SteamCMD
+
+**On Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install steamcmd
+```
+
+**On CentOS/RHEL/Fedora:**
+```bash
+sudo dnf install steamcmd
+```
+
+### 2. Create SteamCMD Directory
+
+```bash
+mkdir -p ~/steamcmd
+cd ~/steamcmd
+```
+
+### 3. Download and Run SteamCMD
+
+```bash
+# Download SteamCMD
+wget https://steamcdn-a.akamaihd.net/client/installer/steamcmd_linux.tar.gz
+
+# Extract the archive
+tar -xvzf steamcmd_linux.tar.gz
+
+# Run SteamCMD
+./steamcmd.sh +login anonymous +quit
+```
+
+### 4. Install Valheim Server
+
+```bash
+# Install Valheim server files
+./steamcmd.sh +login anonymous +force_install_dir ~/valheim +app_update 896660 validate +quit
+
+# Verify installation
+ls -la ~/valheim
+```
+
+### 5. Configure SteamCMD Path
+
+Update your `config.conf` file with the correct SteamCMD path:
+```bash
+STEAMCMD_BIN="/home/yourusername/steamcmd/steamcmd.sh"
+```
+
+> **Note**: The server will automatically update using SteamCMD if `USE_STEAMCMD_UPDATE=true` is set in `config.conf`.
+
 ## 🛠️ Installation & Setup
 
 ### 1. Clone the Repository
