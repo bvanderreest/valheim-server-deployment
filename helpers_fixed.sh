@@ -25,7 +25,7 @@ build_args() {
   printf '%s\n' "${args[@]}"
 }
 
-is_running() { [ -f "${PIDFILE}" ] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; }
+is_running() { [[ -f "${PIDFILE}" ]] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; }
 
 latest_backup() { ls -1t "${BACKUP_DIR}"/world-"${WORLD_NAME}"-*.tar.gz 2>/dev/null | head -n 1; }
 
@@ -33,9 +33,9 @@ guard_world() {
   # If current world files are missing or zero-sized (common after power cut), restore the newest backup.
   local db="${SAVEDIR}/${WORLD_NAME}.db"
   local fwl="${SAVEDIR}/${WORLD_NAME}.fwl"
-  if [ ! -f "${db}" ] || [ ! -s "${db}" ] || [ ! -f "${fwl}" ] || [ ! -s "${fwl}" ]; then
+  if [[ ! -f "${db}" || ! -s "${db}" || ! -f "${fwl}" || ! -s "${fwl}" ]]; then
     local last; last="$(latest_backup || true)"
-    if [ -n "${last}" ]; then
+    if [[ -n "${last}" ]]; then
       echo "[guard] Damaged/missing world. Restoring from ${last}"
       tar -xzf "${last}" -C "${SAVEDIR}"
       echo "[guard] Restore complete."
@@ -49,9 +49,9 @@ get_uptime() {
   # Calculate uptime from PID start time
   if ! is_running; then echo "0"; return; fi
   local pid; pid="$(cat "${PIDFILE}" 2>/dev/null)"
-  if [ -z "${pid}" ]; then echo "0"; return; fi
+  if [[ -z "${pid}" ]]; then echo "0"; return; fi
   local start_time; start_time="$(stat -c %Y /proc/${pid} 2>/dev/null || echo 0)"
-  if [ "${start_time}" -eq 0 ]; then echo "0"; return; fi
+  if [[ "${start_time}" -eq 0 ]]; then echo "0"; return; fi
   echo $(($(date +%s) - start_time))
 }
 
@@ -60,32 +60,37 @@ format_uptime() {
   local days=$((seconds / 86400))
   local hours=$(((seconds % 86400) / 3600))
   local mins=$(((seconds % 3600) / 60))
-  if [ $days -gt 0 ]; then
+  if (( days > 0 )); then
     printf "%dd %dh %dm" "$days" "$hours" "$mins"
-  elif [ $hours -gt 0 ]; then
+  elif (( hours > 0 )); then
     printf "%dh %dm" "$hours" "$mins"
-  elif [ $mins -gt 0 ]; then
+  elif (( mins > 0 )); then
     printf "%dm" "$mins"
   else
     echo "0m"
   fi
 }
 
+# This function is kept for compatibility but count_connected_players is the main one used
+grep -oP "(?<=Player ').*?(?=' )(?:connected|disconnected)" "${LOGFILE}" 2>/dev/null | sort | uniq | wc -l
+}
+
 count_connected_players() {
   # More accurate: track who connected and disconnected
-  if [ ! -f "${LOGFILE}" ]; then echo "0"; return; fi
-  local players=""
+  if [[ ! -f "${LOGFILE}" ]]; then echo "0"; return; fi
+  local -A players
   while IFS= read -r line; do
     # Try to match the format with player names: "Player 'PlayerName' connected/disconnected"
-    if echo "$line" | grep -q "Player '[^']*' connected"; then
-      local player=$(echo "$line" | sed -n "s/.*Player '\([^']*\)'.*/\1/p")
-      players="$players $player"
-    elif echo "$line" | grep -q "Player '[^']*' disconnected"; then
-      local player=$(echo "$line" | sed -n "s/.*Player '\([^']*\)'.*/\1/p")
-      players=$(echo "$players" | sed "s/ $player//")
-    fi
+    if [[ $line =~ Player\ '([^']+)'\ (connected|disconnected) ]]; then
+      local player="${BASH_REMATCH[1]}"
+      local action="${BASH_REMATCH[2]}"
+      if [[ "${action}" == "connected" ]]; then
+        players["${player}"]=1
+      else
+        unset 'players["${player}"]'
+      fi
   done < "${LOGFILE}"
-  echo "$players" | wc -w
+  echo "${#players[@]}"
 }
 
 get_server_ip() {
