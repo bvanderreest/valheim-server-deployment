@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 # Valheim server manager — manual control, resilient to power loss.
 # Commands: start | stop | restart | stats | logs | update | backup
