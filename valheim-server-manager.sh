@@ -22,23 +22,33 @@ start() {
   # Enter server directory so ./linux64 resolves for Steam init
   cd "${SERVER_DIR}"
 
-  # Verify server directory exists
-  if [[ ! -d "${SERVER_DIR}" ]]; then
-    echo "Error: Server directory does not exist: ${SERVER_DIR}"
-    exit 1
-  fi
-  
-  # Verify binary exists
-  if [[ ! -x "${BINARY}" ]]; then
-    echo "Error: Server binary not found or not executable: ${BINARY}"
-    exit 1
-  fi
+ # Verify server directory exists
+ if [[ ! -d "${SERVER_DIR}" ]]; then
+   echo "Error: Server directory does not exist: ${SERVER_DIR}"
+   exit 1
+ fi
+ 
+ # Verify binary exists
+ if [[ ! -x "${BINARY}" ]]; then
+   echo "Error: Server binary not found or not executable: ${BINARY}"
+   exit 1
+ fi
+ 
+ # Ensure Steam environment is properly initialized
+ if [[ -z "${STEAM_RUNTIME}" ]]; then
+   export STEAM_RUNTIME=1
+ fi
 
   # Steam runtime env (Linux): required for Steam backend init
   export templdpath="$LD_LIBRARY_PATH"
   export LD_LIBRARY_PATH="./linux64:$LD_LIBRARY_PATH"
   export SteamAppId=892970
-  [[ -f "${SERVER_DIR}/steam_appid.txt" ]] || echo 892970 > "${SERVER_DIR}/steam_appid.txt"
+  
+  # Ensure steam_appid.txt exists
+  if [[ ! -f "${SERVER_DIR}/steam_appid.txt" ]]; then
+    echo 892970 > "${SERVER_DIR}/steam_appid.txt"
+    echo "[start] Created steam_appid.txt"
+  fi
   
   # Additional Steam environment variables to prevent initialization errors
   export SteamGameServer=1
@@ -46,10 +56,6 @@ start() {
   export SteamNoLaunch=1
   export SteamPipe=1
   export SteamEnv=1
-  
-  # Set Steam-specific environment variables to avoid initialization issues
-  export SteamAppId=892970
-  export SteamAppId=892970
   
   mapfile -t ARGS < <(build_args)
   echo "[start] Exec:" "${BINARY}" "${ARGS[@]}"
