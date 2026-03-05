@@ -58,8 +58,9 @@ start() {
   export SteamEnv=1
   
   mapfile -t ARGS < <(build_args)
+  echo "[start] Starting, please use the Log command to view its status"
   echo "[start] Exec:" "${BINARY}" "${ARGS[@]}"
-  "${BINARY}" "${ARGS[@]}" &
+  "${BINARY}" "${ARGS[@]}" >> "${LOGFILE}" 2>&1 &
   echo $! > "${PIDFILE}"
   echo "[start] PID $(cat "${PIDFILE}"); logs: ${LOGFILE}"
 }
