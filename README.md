@@ -251,7 +251,26 @@ The monitoring script can be used externally:
 ./valheim-server-manager.sh logs
 ./valheim-server-manager.sh update
 ./valheim-server-manager.sh backup
+./valheim-server-manager.sh deploy
 ```
+
+## Deployment Process
+
+The `deploy` command will install the Valheim server in a dedicated `server` directory within the script's folder. After deployment:
+1. Run `./valheim-server-manager.sh deploy` to install the server
+2. Run `./valheim-server-manager.sh start` to start the server
+
+The default server path is set to `${SCRIPT_DIR}/server/`, which will be automatically configured in your `.env` file after deployment.
+
+## SteamCMD and steamclient.so Notes
+
+Valheim requires proper Steam runtime libraries. The deploy command:
+- Installs required system packages including 32-bit libraries
+- Uses SteamCMD to download the server binaries
+- The `steamclient.so` library should be automatically detected by the server
+- For dedicated servers, `steamclient.so` is typically not required for basic functionality
+- If you encounter issues with Steam features, ensure your system has proper 32-bit compatibility libraries
+- You can verify the installation by checking that `valheim_server.x86_64` exists in your server directory
 
 ------------------------------------------------------------------------
 

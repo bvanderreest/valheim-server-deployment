@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Valheim server manager — manual control, resilient to power loss.
-# Commands: start | stop | restart | stats | logs | update | backup
+# Commands: start | stop | restart | stats | logs | update | backup | deploy
 
 set -eo pipefail
 
@@ -195,7 +195,125 @@ backup() {
   fi
 }
 
-usage() { echo "Usage: $0 {start|stop|restart|stats|logs|update|backup}"; }
+deploy() {
+  echo "[deploy] Starting deployment of Valheim server..."
+  
+  # Check if we're running as root (required for system package installation)
+  # Note: We don't necessarily need to be root, but we'll warn about it
+  if [[ $EUID -ne 0 ]]; then
+    echo "[deploy] Warning: This script should be run with sudo or as root to install system packages."
+    echo "[deploy] If you encounter permission issues, please run with sudo."
+  fi
+  
+  # Create server directory structure
+  local server_dir="${SCRIPT_DIR}/server"
+  echo "[deploy] Creating server directory at ${server_dir}"
+  
+  # Check if directory already exists
+  if [[ -d "${server_dir}" ]]; then
+    echo "[deploy] Warning: Server directory already exists at ${server_dir}"
+    echo "[deploy] If you want to reinstall, please remove the directory first:"
+    echo "[deploy]   rm -rf \"${server_dir}\""
+    read -p "[deploy] Continue anyway? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+      echo "[deploy] Deployment cancelled."
+      exit 0
+    fi
+  fi
+  
+  mkdir -p "${server_dir}"
+  
+  # Verify directory was created successfully
+  if [[ ! -d "${server_dir}" ]]; then
+    echo "[deploy] Error: Failed to create server directory at ${server_dir}"
+    exit 1
+  fi
+  
+  # Install required system packages
+  echo "[deploy] Installing required system packages..."
+  if command -v apt-get &> /dev/null; then
+    # Debian/Ubuntu
+    apt-get update
+    apt-get install -y lib32gcc-9-dev lib32stdc++6 lib32z1 steamcmd curl wget unzip
+  elif command -v yum &> /dev/null; then
+    # CentOS/RHEL/Fedora
+    yum install -y glibc.i686 libstdc++.i686 zlib.i686 steamcmd curl wget unzip
+  elif command -v dnf &> /dev/null; then
+    # Fedora
+    dnf install -y glibc.i686 libstdc++.i686 zlib.i686 steamcmd curl wget unzip
+  else
+    echo "[deploy] Warning: Could not detect package manager. Please install steamcmd manually."
+  fi
+  
+  # Check if SteamCMD is installed and working
+  if [[ ! -x "$(command -v steamcmd)" ]]; then
+    echo "[deploy] Error: SteamCMD not found. Please install it manually or ensure your package manager worked correctly."
+    echo "[deploy] You can try installing it manually with: sudo apt-get install steamcmd"
+    exit 1
+  fi
+  
+  # Test SteamCMD by running it with a simple command
+  if ! steamcmd +quit 2>/dev/null; then
+    echo "[deploy] Warning: SteamCMD test failed. Some functionality may be limited."
+  fi
+  
+  # Install Valheim server using SteamCMD
+  echo "[deploy] Installing Valheim server via SteamCMD..."
+  
+  # Ensure the directory is writable by current user for SteamCMD
+  # Only change ownership if we're not already root (to avoid potential issues)
+  if [[ $EUID -ne 0 ]]; then
+    chown -R "$(whoami)" "${server_dir}"
+  fi
+  
+  # Install Valheim server using SteamCMD with better error handling
+  if ! steamcmd +login anonymous +force_install_dir "${server_dir}" +app_update 896660 validate +quit; then
+    echo "[deploy] Error: Failed to install Valheim server via SteamCMD"
+    exit 1
+  fi
+  
+  # Verify installation
+  if [[ ! -f "${server_dir}/valheim_server.x86_64" ]]; then
+    echo "[deploy] Error: Valheim server binary not found after installation."
+    echo "[deploy] This might be due to SteamCMD issues or network problems."
+    echo "[deploy] Please check:"
+    echo "[deploy]   1. Your internet connection"
+    echo "[deploy]   2. SteamCMD installation"
+    echo "[deploy]   3. Steam login credentials (if required)"
+    exit 1
+  fi
+  
+  # Verify the binary is executable
+  if [[ ! -x "${server_dir}/valheim_server.x86_64" ]]; then
+    echo "[deploy] Setting executable permissions on server binary..."
+    chmod +x "${server_dir}/valheim_server.x86_64"
+  fi
+  
+  # Set up environment variables for the server directory
+  echo "[deploy] Setting up environment variables..."
+  cat > "${SCRIPT_DIR}/.env" << EOF
+SERVER_DIR="${server_dir}"
+EOF
+  
+  # Ensure proper permissions on .env file
+  chmod 600 "${SCRIPT_DIR}/.env"
+  
+  # Update config.conf to use the new server directory
+  echo "[deploy] Updating configuration..."
+  
+  # Create a backup of the original config
+  cp "${SCRIPT_DIR}/config.conf" "${SCRIPT_DIR}/config.conf.backup"
+  
+  # Update SERVER_DIR in config.conf
+  sed -i "s|SERVER_DIR.*|SERVER_DIR=\"${server_dir}\"|" "${SCRIPT_DIR}/config.conf"
+  
+  echo "[deploy] Deployment complete!"
+  echo "[deploy] Valheim server installed at: ${server_dir}"
+  echo "[deploy] Configuration updated. Please review the .env file."
+}
+
+usage() { echo "Usage: $0 {start|stop|restart|stats|logs|update|backup|deploy}"; }
 
 case "${1:-}" in
   start) start ;;
@@ -205,5 +323,6 @@ case "${1:-}" in
   logs) logs ;;
   update) update ;;
   backup) backup ;;
+  deploy) deploy ;;
   *) usage; exit 1 ;;
 esac
