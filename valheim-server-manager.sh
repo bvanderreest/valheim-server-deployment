@@ -145,6 +145,42 @@ stats() {
   echo "═══════════════════════════════════════════════════════"
 }
 
+check_steam_connectivity() {
+  local endpoints=(
+    "api.steampowered.com:443"
+    "steamcdn-a.akamaihd.net:443"
+    "steamcontent.com:443"
+    "cm.steampowered.com:27017"
+  )
+  local reachable=0
+  local failed=()
+
+  echo "[update] Checking Steam connectivity..."
+  for endpoint in "${endpoints[@]}"; do
+    local host="${endpoint%%:*}"
+    local port="${endpoint##*:}"
+    if curl --silent --max-time 5 --output /dev/null "https://${host}" 2>/dev/null \
+       || (echo >/dev/tcp/"${host}"/"${port}") 2>/dev/null; then
+      (( reachable++ ))
+    else
+      failed+=("${endpoint}")
+    fi
+  done
+
+  if [[ ${reachable} -eq 0 ]]; then
+    echo "[update] Error: Cannot reach any Steam endpoint. Check your network and outbound firewall rules (TCP/UDP 27015-27030, TCP 80/443)."
+    return 1
+  fi
+
+  if [[ ${#failed[@]} -gt 0 ]]; then
+    echo "[update] Warning: Some Steam endpoints unreachable: ${failed[*]}"
+    echo "[update] Proceeding — ${reachable}/${#endpoints[@]} endpoints reachable."
+  else
+    echo "[update] Steam connectivity OK (${reachable}/${#endpoints[@]} endpoints reachable)."
+  fi
+  return 0
+}
+
 update() {
   if [[ "${USE_STEAMCMD_UPDATE}" != "true" ]]; then echo "SteamCMD update disabled."; return 0; fi
   [[ -x "${STEAMCMD_BIN}" ]] || { echo "SteamCMD not found at ${STEAMCMD_BIN}"; exit 1; }
@@ -152,6 +188,8 @@ update() {
 
   # Remove stale Steam lock files that cause "didn't shutdown cleanly" timeouts
   rm -f "${HOME}/.steam/steam.pid" "${HOME}/.local/share/Steam/steam.pid" 2>/dev/null
+
+  check_steam_connectivity || exit 1
 
   echo "[update] Updating app 896660 to ${SERVER_DIR}…"
   if ! "${STEAMCMD_BIN}" +force_install_dir "${SERVER_DIR}" +login "${STEAM_LOGIN}" +app_update 896660 validate +quit; then
