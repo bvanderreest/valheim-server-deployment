@@ -253,9 +253,13 @@ deploy() {
   fi
   echo "[deploy] Found SteamCMD at: ${steamcmd_bin}"
 
-  # Test SteamCMD by running it with a simple command
-  if ! "${steamcmd_bin}" +quit 2>/dev/null; then
-    echo "[deploy] Warning: SteamCMD test failed. Some functionality may be limited."
+  # Initialize/self-update SteamCMD before downloading the app.
+  # Running +quit lets SteamCMD download its own package files; without this
+  # the subsequent app_update fails with "Missing configuration".
+  echo "[deploy] Initializing SteamCMD (self-update)..."
+  if ! "${steamcmd_bin}" +quit; then
+    echo "[deploy] Error: SteamCMD failed to initialize. Check your network connection and SteamCMD installation."
+    exit 1
   fi
   
   # Install Valheim server using SteamCMD
