@@ -149,8 +149,15 @@ update() {
   if [[ "${USE_STEAMCMD_UPDATE}" != "true" ]]; then echo "SteamCMD update disabled."; return 0; fi
   [[ -x "${STEAMCMD_BIN}" ]] || { echo "SteamCMD not found at ${STEAMCMD_BIN}"; exit 1; }
   is_running && { echo "[update] Stopping…"; stop; }
+
+  # Remove stale Steam lock files that cause "didn't shutdown cleanly" timeouts
+  rm -f "${HOME}/.steam/steam.pid" "${HOME}/.local/share/Steam/steam.pid" 2>/dev/null
+
   echo "[update] Updating app 896660 to ${SERVER_DIR}…"
-  "${STEAMCMD_BIN}" +force_install_dir "${SERVER_DIR}" +login "${STEAM_LOGIN}" +app_update 896660 validate +quit
+  if ! "${STEAMCMD_BIN}" +force_install_dir "${SERVER_DIR}" +login "${STEAM_LOGIN}" +app_update 896660 validate +quit; then
+    echo "[update] Error: SteamCMD failed. Check your network and that ports TCP/UDP 27015-27030 and TCP 80/443 are open outbound."
+    exit 1
+  fi
   echo "[update] Done."
 }
 
