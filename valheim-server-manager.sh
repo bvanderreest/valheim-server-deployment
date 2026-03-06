@@ -132,9 +132,9 @@ stats() {
 
   printf "\n"
   echo "Storage:"
-  [[ -f "${SAVEDIR}/${WORLD_NAME}.db" ]] && {
-    local size; size="$(du -sh "${SAVEDIR}/${WORLD_NAME}.db" 2>/dev/null | cut -f1)"
-    echo "  World DB:       ${size} (${SAVEDIR}/${WORLD_NAME}.db)"
+  [[ -f "${SAVEDIR}/worlds_local/${WORLD_NAME}.db" ]] && {
+    local size; size="$(du -sh "${SAVEDIR}/worlds_local/${WORLD_NAME}.db" 2>/dev/null | cut -f1)"
+    echo "  World DB:       ${size} (${SAVEDIR}/worlds_local/${WORLD_NAME}.db)"
   }
   [[ -d "${BACKUP_DIR}" ]] && {
     local backup_count; backup_count="$(ls -1 "${BACKUP_DIR}"/world-"${WORLD_NAME}"-*.tar.gz 2>/dev/null | wc -l)"
@@ -157,22 +157,25 @@ update() {
 backup() {
   echo "[backup] Creating backup for world: $WORLD_NAME"
 
+  # Valheim stores world files in a worlds_local subdirectory
+  local world_dir="${SAVEDIR}/worlds_local"
+
   # Validate backup directory exists
   mkdir -p "$BACKUP_DIR"
-  
+
   # Check if world files exist
-  if [[ ! -f "$SAVEDIR/$WORLD_NAME.db" ]] || [[ ! -f "$SAVEDIR/$WORLD_NAME.fwl" ]]; then
-    echo "[backup] Warning: World files not found. This may be normal if world hasn't been created yet."
+  if [[ ! -f "$world_dir/$WORLD_NAME.db" ]] || [[ ! -f "$world_dir/$WORLD_NAME.fwl" ]]; then
+    echo "[backup] Warning: World files not found at ${world_dir}. This may be normal if world hasn't been created yet."
     return 1
   fi
-  
+
   # Create timestamped backup
   local ts; ts="$(date +"%Y-%m-%d_%H-%M-%S")"
   local out="${BACKUP_DIR}/world-${WORLD_NAME}-${ts}.tar.gz"
   echo "[backup] Creating ${out}…"
-  
+
   # Perform backup synchronously
-  if tar -czf "$out" -C "$SAVEDIR" "$WORLD_NAME.db" "$WORLD_NAME.fwl"; then
+  if tar -czf "$out" -C "$world_dir" "$WORLD_NAME.db" "$WORLD_NAME.fwl"; then
     echo "[backup] OK. Backup completed successfully."
     
     # Clean up old backups, keeping the most recent BACKUPS_KEEP
