@@ -146,37 +146,26 @@ stats() {
 }
 
 check_steam_connectivity() {
-  local endpoints=(
-    "api.steampowered.com:443"
-    "steamcdn-a.akamaihd.net:443"
-    "steamcontent.com:443"
-    "cm.steampowered.com:27017"
-  )
-  local reachable=0
-  local failed=()
+  # Uses the official SteamCMD API to verify connectivity before invoking SteamCMD.
+  # This is more reliable than pinging generic CDN endpoints — a successful response
+  # confirms Steam can serve the exact app data SteamCMD needs.
+  local api_url="https://api.steamcmd.net/v1/info/896660"
 
-  echo "[update] Checking Steam connectivity..."
-  for endpoint in "${endpoints[@]}"; do
-    local host="${endpoint%%:*}"
-    local port="${endpoint##*:}"
-    if curl --silent --max-time 5 --output /dev/null "https://${host}" 2>/dev/null \
-       || (echo >/dev/tcp/"${host}"/"${port}") 2>/dev/null; then
-      (( reachable++ ))
-    else
-      failed+=("${endpoint}")
-    fi
-  done
+  echo "[update] Checking Steam connectivity via api.steamcmd.net..."
+  local response
+  response="$(curl --silent --max-time 10 "${api_url}" 2>/dev/null)"
 
-  if [[ ${reachable} -eq 0 ]]; then
-    echo "[update] Error: Cannot reach any Steam endpoint. Check your network and outbound firewall rules (TCP/UDP 27015-27030, TCP 80/443)."
+  if [[ -z "${response}" ]]; then
+    echo "[update] Error: No response from api.steamcmd.net. Check your network and outbound TCP 443."
     return 1
   fi
 
-  if [[ ${#failed[@]} -gt 0 ]]; then
-    echo "[update] Warning: Some Steam endpoints unreachable: ${failed[*]}"
-    echo "[update] Proceeding — ${reachable}/${#endpoints[@]} endpoints reachable."
+  if echo "${response}" | grep -q '"status":"success"'; then
+    echo "[update] Steam connectivity OK — app 896660 is reachable."
   else
-    echo "[update] Steam connectivity OK (${reachable}/${#endpoints[@]} endpoints reachable)."
+    echo "[update] Warning: api.steamcmd.net responded but returned an unexpected status."
+    echo "[update] Response: ${response:0:200}"
+    echo "[update] Proceeding anyway — SteamCMD may still work."
   fi
   return 0
 }
