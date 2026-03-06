@@ -312,7 +312,34 @@ deploy() {
   echo "[deploy] Configuration updated. Please review the .env file."
 }
 
-usage() { echo "Usage: $0 {start|stop|restart|stats|logs|update|backup|deploy}"; }
+usage() {
+  echo "╔═══════════════════════════════════════════════════════════╗"
+  echo "║          Valheim Server Manager — Command Reference       ║"
+  echo "╚═══════════════════════════════════════════════════════════╝"
+  echo ""
+  echo "  Usage: $0 <command>"
+  echo ""
+  echo "  ── Server Lifecycle ────────────────────────────────────────"
+  echo "  start      Start the Valheim server (background process)"
+  echo "  stop       Gracefully stop the running server"
+  echo "  restart    Stop and start the server"
+  echo ""
+  echo "  ── Monitoring ──────────────────────────────────────────────"
+  echo "  stats      Show server status, config, and storage info"
+  echo "  logs       Tail the live server log output"
+  echo ""
+  echo "  ── Maintenance ─────────────────────────────────────────────"
+  echo "  backup     Archive world files to \$BACKUP_DIR"
+  echo "  update     Pull the latest Valheim server build via SteamCMD"
+  echo "  deploy     Install SteamCMD, dependencies, and server files"
+  echo ""
+  echo "  ── Examples ────────────────────────────────────────────────"
+  echo "  sudo $0 deploy     # First-time install"
+  echo "  $0 start           # Start the server"
+  echo "  $0 stats           # Check status and storage"
+  echo "  $0 backup          # Manual world backup"
+  echo ""
+}
 
 case "${1:-}" in
   start) start ;;
