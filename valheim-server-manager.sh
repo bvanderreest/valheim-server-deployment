@@ -160,7 +160,7 @@ check_steam_connectivity() {
     return 1
   fi
 
-  if echo "${response}" | grep -q '"status":"success"'; then
+  if echo "${response}" | grep -qE '"status"\s*:\s*"success"'; then
     echo "[update] Steam connectivity OK — app 896660 is reachable."
   else
     echo "[update] Warning: api.steamcmd.net responded but returned an unexpected status."
