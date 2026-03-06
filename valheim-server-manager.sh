@@ -150,7 +150,7 @@ update() {
   [[ -x "${STEAMCMD_BIN}" ]] || { echo "SteamCMD not found at ${STEAMCMD_BIN}"; exit 1; }
   is_running && { echo "[update] Stopping…"; stop; }
   echo "[update] Updating app 896660 to ${SERVER_DIR}…"
-  "${STEAMCMD_BIN}" +login "${STEAM_LOGIN}" +force_install_dir "${SERVER_DIR}" +app_update 896660 validate +quit
+  "${STEAMCMD_BIN}" +force_install_dir "${SERVER_DIR}" +login "${STEAM_LOGIN}" +app_update 896660 validate +quit
   echo "[update] Done."
 }
 
