@@ -1,85 +1,93 @@
-# Valheim Server Modifier System
+# Valheim Server — Modifier Reference
 
-This document describes how gameplay modifiers are configured for the Valheim dedicated server.
+Modifiers let you tune the gameplay experience without touching the server binary. This document covers every option available in `modifiers.conf` and how they combine at launch.
 
 ---
 
 ## How It Works
 
-Modifiers are built by `build_args()` in `helpers.sh` and passed to the server binary at launch. The process is:
+When the server starts, `build_args()` in `helpers.sh` assembles the launch arguments in this order:
 
-1. `set_modifier_group` sets `ENABLE_*` flags based on `DEFAULT_MODIFIER_GROUP`
-2. `modifiers.conf` is sourced — any explicit `ENABLE_*` lines in your file override the group defaults
-3. Enabled modifier arrays are iterated and emitted as `-modifier <category> <value>` flags
-4. `SETKEYS` entries are emitted as `-setkey <key>` flags
-5. `PRESET` is emitted as `-preset <value>` if set
-
----
-
-## Configuration File
-
-**`modifiers.conf`** is your live config. It is created automatically from `modifiers.example.conf` on first run and is never overwritten by updates.
+1. **Group selection** — `DEFAULT_MODIFIER_GROUP` sets which modifier tiers are active
+2. **Override resolution** — any explicit `ENABLE_*` flags in your `modifiers.conf` take precedence over the group
+3. **Preset** — emitted as `-preset <value>` (sets a named difficulty baseline)
+4. **Modifiers** — each enabled array entry becomes `-modifier <category> <value>`
+5. **Setkeys** — each entry becomes `-setkey <key>` (boolean world flags)
 
 ---
 
-## Customisation Levels (`DEFAULT_MODIFIER_GROUP`)
+## Quick Setup
 
-Set this once at the top of `modifiers.conf` to control which tiers are active:
+`modifiers.conf` is created automatically from `modifiers.example.conf` on first run. It is never overwritten by updates, so your changes are safe.
 
-| Value | Active tiers |
-|-------|-------------|
-| `preset` | Preset only — no `-modifier` flags |
-| `basic` | `BASIC_MODIFIERS` only |
-| `standard` | `BASIC_MODIFIERS` (default) |
-| `hardcore` | `BASIC_MODIFIERS` + `ADVANCED_MODIFIERS` + `EXPERT_MODIFIERS` |
-| `custom` | `CUSTOM_MODIFIERS` only |
-
-You can also override individual `ENABLE_*` flags directly in `modifiers.conf` — they take precedence over the group:
+For most servers, you only need to set two things:
 
 ```bash
 DEFAULT_MODIFIER_GROUP="standard"
-ENABLE_EXPERT_MODIFIERS=true   # overrides the group — expert modifiers will also fire
+PRESET="normal"
+```
+
+Then adjust `BASIC_MODIFIERS` to taste.
+
+---
+
+## Modifier Groups (`DEFAULT_MODIFIER_GROUP`)
+
+This single setting controls which tiers of modifiers are sent to the server.
+
+| Value | What gets applied |
+|-------|-------------------|
+| `preset` | Preset only — no `-modifier` flags at all |
+| `basic` | `BASIC_MODIFIERS` only |
+| `standard` | `BASIC_MODIFIERS` (same as `basic` — the default) |
+| `hardcore` | `BASIC_MODIFIERS` + `ADVANCED_MODIFIERS` + `EXPERT_MODIFIERS` |
+| `custom` | `CUSTOM_MODIFIERS` only — you define the full list yourself |
+
+You can also override individual tiers without changing the group:
+
+```bash
+DEFAULT_MODIFIER_GROUP="standard"
+ENABLE_EXPERT_MODIFIERS=true   # add expert modifiers on top of the standard set
 ```
 
 ---
 
 ## Preset Difficulty (`PRESET`)
 
-Passed as `-preset <value>`. Sets a named difficulty baseline before any `-modifier` flags are applied.
+Sets a named difficulty baseline before any `-modifier` flags are applied. Think of it as the starting point that your modifiers then adjust.
 
-Valid values (case-insensitive):
-
-| Value | Description |
-|-------|-------------|
-| `casual` | Very easy — minimal challenge |
-| `easy` | Reduced difficulty |
-| `normal` | Default Valheim experience |
-| `hard` | Increased challenge |
+| Value | Experience |
+|-------|-----------|
+| `casual` | Very easy — minimal challenge, forgiving death |
+| `easy` | Reduced difficulty across the board |
+| `normal` | Default Valheim — balanced challenge |
+| `hard` | Increased enemy difficulty and fewer resources |
 | `hardcore` | Permadeath-style penalties |
-| `immersive` | No map, increased realism |
-| `hammer` | Creative mode — no resource costs |
+| `immersive` | No shared map, increased realism |
+| `hammer` | Creative mode — no resource costs for building |
 
-Set `PRESET=""` to skip the preset entirely.
+Set `PRESET=""` to skip the preset entirely and rely solely on modifiers.
 
 ---
 
 ## Basic Modifiers (`BASIC_MODIFIERS`)
 
-These are the **5 official vanilla `-modifier` categories**. Each entry becomes `-modifier <category> <value>`.
+The five official vanilla modifier categories. Each entry is passed to the server as `-modifier <Category> <value>`.
 
-> **These are the only modifier categories supported by the vanilla dedicated server.**
+> These are the only modifier categories supported by the vanilla dedicated server.
+> If you are running a modded server (ValheimPlus, Jotunn mods), see Advanced & Expert below.
 
-### Valid categories and values
+### Categories and valid values
 
-| Category | Valid values |
-|----------|-------------|
-| `Combat` | `veryeasy` `easy` `hard` `veryhard` |
-| `DeathPenalty` | `casual` `veryeasy` `easy` `hard` `hardcore` |
-| `Resources` | `muchless` `less` `more` `muchmore` `most` |
-| `Raids` | `none` `muchless` `less` `more` `muchmore` |
-| `Portals` | `casual` `hard` `veryhard` |
+| Category | Values | Effect |
+|----------|--------|--------|
+| `Combat` | `veryeasy` `easy` _(default)_ `hard` `veryhard` | Enemy damage and aggression |
+| `DeathPenalty` | `casual` `veryeasy` `easy` _(default)_ `hard` `hardcore` | What you lose on death |
+| `Resources` | `muchless` `less` _(default)_ `more` `muchmore` `most` | Crafting/building material yield |
+| `Raids` | `none` `muchless` `less` _(default)_ `more` `muchmore` | Frequency of enemy raids on your base |
+| `Portals` | `casual` _(default)_ `hard` `veryhard` | Portal restrictions (item carry rules) |
 
-### Example
+### Example — relaxed community server
 
 ```bash
 BASIC_MODIFIERS=(
@@ -91,24 +99,48 @@ BASIC_MODIFIERS=(
 )
 ```
 
+### Example — challenging survival server
+
+```bash
+BASIC_MODIFIERS=(
+    "Combat=hard"
+    "DeathPenalty=hard"
+    "Resources=less"
+    "Raids=more"
+    "Portals=hard"
+)
+```
+
 ---
 
 ## Advanced & Expert Modifiers
 
-`ADVANCED_MODIFIERS` and `EXPERT_MODIFIERS` follow the same `"Category=value"` format as basic modifiers, but are **not used by the vanilla server**. They are reserved for modded servers (e.g. ValheimPlus, Jotunn-based mods) that register additional `-modifier` categories.
+`ADVANCED_MODIFIERS` and `EXPERT_MODIFIERS` use the same `"Category=value"` format as basic modifiers but are intended for **modded servers** that register additional `-modifier` categories (e.g. ValheimPlus, Jotunn-based mods).
 
-Leave these arrays empty if you are running a vanilla server.
+**Leave these arrays empty on a vanilla server** — unrecognised categories are ignored by the base game but may produce log warnings.
+
+```bash
+ADVANCED_MODIFIERS=()
+EXPERT_MODIFIERS=()
+```
+
+These tiers are only active when `DEFAULT_MODIFIER_GROUP="hardcore"` or when you explicitly set `ENABLE_ADVANCED_MODIFIERS=true` in your config.
 
 ---
 
 ## Custom Modifiers (`CUSTOM_MODIFIERS`)
 
-Active when `DEFAULT_MODIFIER_GROUP="custom"`. Replaces all other tiers — you define the full modifier list yourself. Same format as basic modifiers.
+Active when `DEFAULT_MODIFIER_GROUP="custom"`. Replaces all other tiers — you define the complete modifier list from scratch. Useful when you want precise control with no inherited defaults.
 
 ```bash
+DEFAULT_MODIFIER_GROUP="custom"
+
 CUSTOM_MODIFIERS=(
     "Combat=hard"
+    "DeathPenalty=casual"
     "Resources=less"
+    "Raids=none"
+    "Portals=veryhard"
 )
 ```
 
@@ -116,25 +148,35 @@ CUSTOM_MODIFIERS=(
 
 ## Setkeys (`SETKEYS`)
 
-Passed as `-setkey <key>`. These are boolean world flags — drastic changes that are all **commented out by default**. Only enable what you intentionally want.
+Boolean world flags passed as `-setkey <key>`. These are **drastic, world-altering changes** and are all commented out by default. Only enable what you intentionally want — some cannot be undone without editing the world save.
 
 | Key | Effect |
 |-----|--------|
-| `nomap` | Removes the shared map from all players |
-| `nobuildcost` | Building requires no materials |
-| `nopassivemobs` | Disables passive creatures (deer, birds, fish, etc.) |
-| `noevent` | Disables random world events (raids, etc.) |
+| `nomap` | Removes the shared map — every player navigates without a minimap |
+| `nobuildcost` | Building and crafting costs no materials |
+| `nopassivemobs` | Disables passive creatures (deer, birds, fish) |
+| `noevent` | Disables random world events and raids |
 | `noenemy` | Disables all enemy spawning |
-| `noitem` | Disables item drops from enemies |
-| `noportal` | Disables all portal use |
-| `noenemydrops` | Disables loot drops from enemies |
+| `noitem` | Enemies drop no items |
+| `noportal` | Disables all portal use — no fast travel |
+| `noenemydrops` | Enemies drop no loot (separate from `noitem`) |
 
-### Example (enabling just nomap)
+### Example — hardcore immersion run
 
 ```bash
 SETKEYS=(
     "nomap"
-    # "noportal"
+    "noportal"
+)
+```
+
+### Example — peaceful building server
+
+```bash
+SETKEYS=(
+    "noevent"
+    "noenemy"
+    "nobuildcost"
 )
 ```
 
@@ -142,7 +184,7 @@ SETKEYS=(
 
 ## Tier Control Flags
 
-These are set automatically by `DEFAULT_MODIFIER_GROUP`, but can be overridden manually in `modifiers.conf`:
+These are set automatically by `DEFAULT_MODIFIER_GROUP` but can be overridden directly in `modifiers.conf`. Explicit values always win.
 
 ```bash
 ENABLE_BASIC_MODIFIERS=true
@@ -151,12 +193,52 @@ ENABLE_EXPERT_MODIFIERS=false
 ENABLE_CUSTOM_MODIFIERS=false
 ```
 
-Explicit values in `modifiers.conf` always take precedence over the group default.
+---
+
+## Common Configurations
+
+### Casual / family-friendly
+
+```bash
+DEFAULT_MODIFIER_GROUP="standard"
+PRESET="easy"
+BASIC_MODIFIERS=(
+    "Combat=veryeasy"
+    "DeathPenalty=casual"
+    "Resources=more"
+    "Raids=none"
+    "Portals=casual"
+)
+```
+
+### Vanilla experience (no modifiers)
+
+```bash
+DEFAULT_MODIFIER_GROUP="preset"
+PRESET="normal"
+```
+
+### Hardcore survival
+
+```bash
+DEFAULT_MODIFIER_GROUP="standard"
+PRESET="hard"
+BASIC_MODIFIERS=(
+    "Combat=veryhard"
+    "DeathPenalty=hardcore"
+    "Resources=muchless"
+    "Raids=more"
+    "Portals=veryhard"
+)
+SETKEYS=(
+    "nomap"
+)
+```
 
 ---
 
 ## References
 
-- [Valheim World Modifiers Wiki](https://valheim.fandom.com/wiki/World_Modifiers)
-- [Valheim Global Keys Wiki](https://valheim.fandom.com/wiki/Global_Keys)
-- [Valheim Dedicated Server Guide](https://www.valheimgame.com/support/a-guide-to-dedicated-servers/)
+- [Valheim World Modifiers — Wiki](https://valheim.fandom.com/wiki/World_Modifiers)
+- [Valheim Global Keys — Wiki](https://valheim.fandom.com/wiki/Global_Keys)
+- [Official Dedicated Server Guide](https://www.valheimgame.com/support/a-guide-to-dedicated-servers/)
