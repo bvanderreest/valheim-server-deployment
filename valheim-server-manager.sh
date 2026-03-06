@@ -180,6 +180,13 @@ update() {
 
   check_steam_connectivity || exit 1
 
+  # Verify the server directory is writable before invoking SteamCMD
+  if [[ ! -w "${SERVER_DIR}" ]]; then
+    echo "[update] Error: ${SERVER_DIR} is not writable by $(whoami)."
+    echo "[update] Fix with: sudo chown -R $(whoami) \"${SERVER_DIR}\""
+    exit 1
+  fi
+
   echo "[update] Updating app 896660 to ${SERVER_DIR}…"
   if ! "${STEAMCMD_BIN}" +force_install_dir "${SERVER_DIR}" +login "${STEAM_LOGIN}" +app_update 896660 validate +quit; then
     echo "[update] Error: SteamCMD failed. Check your network and that ports TCP/UDP 27015-27030 and TCP 80/443 are open outbound."
@@ -302,11 +309,12 @@ deploy() {
   # Install Valheim server using SteamCMD
   echo "[deploy] Installing Valheim server via SteamCMD..."
   
-  # Ensure the directory is writable by current user for SteamCMD
-  # Only change ownership if we're not already root (to avoid potential issues)
-  if [[ $EUID -ne 0 ]]; then
-    chown -R "$(whoami)" "${server_dir}"
-  fi
+  # Ensure the server directory is owned by the user who will run day-to-day commands.
+  # When deploy is run with sudo, chown back to the real user so update/start/stop
+  # work without sudo. Falls back to the current user if SUDO_USER is not set.
+  local owner="${SUDO_USER:-$(whoami)}"
+  echo "[deploy] Setting ownership of ${server_dir} to ${owner}..."
+  chown -R "${owner}" "${server_dir}"
   
   # Install Valheim server using SteamCMD with better error handling
   if ! "${steamcmd_bin}" +login anonymous +force_install_dir "${server_dir}" +app_update 896660 validate +quit; then
