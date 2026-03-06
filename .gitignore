@@ -24,6 +24,8 @@ Thumbs.db
 # System
 *.tmp
 *.temp
+*.log
+*.logs
 
 # Valheim server directory (do not commit binaries)
 server/

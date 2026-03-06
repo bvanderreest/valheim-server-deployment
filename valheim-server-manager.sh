@@ -57,11 +57,101 @@ start() {
   export SteamEnv=1
   
   mapfile -t ARGS < <(build_args)
-  echo "[start] Starting, please use the Log command to view its status"
-  echo "[start] Exec:" "${BINARY}" "${ARGS[@]}"
+
   "${BINARY}" "${ARGS[@]}" >> "${LOGFILE}" 2>&1 &
   echo $! > "${PIDFILE}"
-  echo "[start] PID $(cat "${PIDFILE}"); logs: ${LOGFILE}"
+  local pid; pid="$(cat "${PIDFILE}")"
+
+  echo "╔═══════════════════════════════════════════════════════════╗"
+  echo "║                  Valheim Server Starting                  ║"
+  echo "╚═══════════════════════════════════════════════════════════╝"
+  printf "  %-12s %s\n" "Server:"    "${SERVER_NAME}"
+  printf "  %-12s %s\n" "World:"     "${WORLD_NAME}"
+  printf "  %-12s %s\n" "Port:"      "${PORT}"
+  printf "  %-12s %s\n" "Public:"    "$([[ "${PUBLIC}" == "1" ]] && echo 'Yes' || echo 'No')"
+  printf "  %-12s %s\n" "Crossplay:" "${CROSSPLAY}"
+  printf "  %-12s %s\n" "Save dir:"  "${SAVEDIR}"
+  printf "  %-12s %s\n" "PID:"       "${pid}"
+  printf "  %-12s %s\n" "Log:"       "${LOGFILE}"
+  echo "───────────────────────────────────────────────────────────"
+
+  # Track startup by watching the log for known Valheim milestone strings (from real log analysis).
+  # The first 4 milestones are common to all configurations.
+  # The 5th milestone (PlayFab join code) only appears when CROSSPLAY=true — omitted for local/private servers.
+  local -a ms_patterns=(
+    "Initialize engine version"
+    "Steam game server initialized"
+    "DungeonDB Start"
+    "Game server connected"
+  )
+  local -a ms_labels=(
+    "Engine        "
+    "Steam         "
+    "World         "
+    "Network       "
+  )
+  if [[ "${CROSSPLAY}" == "true" ]]; then
+    ms_patterns+=("registered with join code")
+    ms_labels+=("Ready         ")
+  fi
+  local total=${#ms_patterns[@]}
+  local bar_width=20
+  local step=0
+  local spin_idx=0
+  local spinners=('|' '/' '-' '\')
+  local timeout=300
+  local elapsed=0
+
+  printf "  Starting...     [%-${bar_width}s]   0%%\r" ""
+
+  while [[ $elapsed -lt $timeout ]]; do
+    # Fail fast if the process died
+    if ! kill -0 "${pid}" 2>/dev/null; then
+      printf "  %-14s  [%-${bar_width}s] FAILED\n" "Process exited" ""
+      echo "───────────────────────────────────────────────────────────"
+      echo "  Run './valheim-server-manager.sh logs' to diagnose."
+      echo "═══════════════════════════════════════════════════════════"
+      rm -f "${PIDFILE}"
+      exit 1
+    fi
+
+    # Advance through any newly reached milestones
+    while [[ $step -lt $total ]] && grep -q "${ms_patterns[$step]}" "${LOGFILE}" 2>/dev/null; do
+      step=$(( step + 1 ))
+    done
+
+    # Render bar
+    local pct=$(( step * 100 / total ))
+    local filled=$(( step * bar_width / total ))
+    local bar=""
+    for (( i=0; i<filled; i++ ));           do bar+="█"; done
+    for (( i=filled; i<bar_width; i++ ));   do bar+="░"; done
+
+    if [[ $step -eq $total ]]; then
+      printf "  %-14s  [%s] 100%%\n" "${ms_labels[$((step-1))]}" "${bar}"
+      break
+    fi
+
+    local spin="${spinners[$spin_idx]}"
+    printf "  %-14s  [%s] %3d%% %s\r" "${ms_labels[$step]}" "${bar}" "${pct}" "${spin}"
+    spin_idx=$(( (spin_idx + 1) % ${#spinners[@]} ))
+    sleep 1
+    elapsed=$(( elapsed + 1 ))
+  done
+
+  if [[ $elapsed -ge $timeout ]]; then
+    printf "  %-14s  [%-${bar_width}s] TIMEOUT\n" "Timed out" ""
+    echo "───────────────────────────────────────────────────────────"
+    echo "  Server may still be loading. Check logs for details."
+    echo "═══════════════════════════════════════════════════════════"
+    exit 1
+  fi
+
+  echo "───────────────────────────────────────────────────────────"
+  echo "  Status:      Started"
+  echo "═══════════════════════════════════════════════════════════"
+  echo "  Use './valheim-server-manager.sh logs' to follow output."
+  echo "═══════════════════════════════════════════════════════════"
 }
 
 stop() {
