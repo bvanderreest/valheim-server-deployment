@@ -4,8 +4,7 @@
 .env
 .env.*
   
-# Modifier configuration files
-modifiers-user.conf
+# Modifier configuration files (user-specific, not for version control)
 modifiers.conf
  
 # Backup files

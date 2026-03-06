@@ -15,32 +15,31 @@ source "${SCRIPT_DIR}/helpers.sh"
 
 start() {
   ensure_paths
+  rotate_log
   guard_world
 
   if is_running; then echo "Already running (PID $(cat "${PIDFILE}"))."; exit 0; fi
 
+  # Verify server directory and binary exist before attempting to cd
+  if [[ ! -d "${SERVER_DIR}" ]]; then
+    echo "Error: Server directory does not exist: ${SERVER_DIR}"
+    exit 1
+  fi
+
+  if [[ ! -x "${BINARY}" ]]; then
+    echo "Error: Server binary not found or not executable: ${BINARY}"
+    exit 1
+  fi
+
   # Enter server directory so ./linux64 resolves for Steam init
   cd "${SERVER_DIR}"
 
- # Verify server directory exists
- if [[ ! -d "${SERVER_DIR}" ]]; then
-   echo "Error: Server directory does not exist: ${SERVER_DIR}"
-   exit 1
- fi
- 
- # Verify binary exists
- if [[ ! -x "${BINARY}" ]]; then
-   echo "Error: Server binary not found or not executable: ${BINARY}"
-   exit 1
- fi
- 
- # Ensure Steam environment is properly initialized
- if [[ -z "${STEAM_RUNTIME}" ]]; then
-   export STEAM_RUNTIME=1
- fi
+  # Ensure Steam environment is properly initialized
+  if [[ -z "${STEAM_RUNTIME}" ]]; then
+    export STEAM_RUNTIME=1
+  fi
 
   # Steam runtime env (Linux): required for Steam backend init
-  export templdpath="$LD_LIBRARY_PATH"
   export LD_LIBRARY_PATH="./linux64:$LD_LIBRARY_PATH"
   export SteamAppId=892970
   
@@ -87,53 +86,50 @@ stats() {
   echo "  Valheim Server Stats — ${SERVER_NAME}"
   echo "═══════════════════════════════════════════════════════"
   printf "\n"
-  
+
   # Server status & uptime
   if is_running; then
     local pid; pid="$(cat "${PIDFILE}")"
     local uptime; uptime="$(get_uptime)"
+    local gss; gss="$(get_game_server_status)"
     echo "Status:           RUNNING (PID ${pid})"
     echo "Uptime:           $(format_uptime "${uptime}")"
+    [[ -n "${gss}" ]] && echo "Steam:            ${gss}"
   else
     echo "Status:           STOPPED"
   fi
-  
+
   printf "\n"
+  local version; version="$(get_valheim_version)"
   echo "World:            ${WORLD_NAME}"
-  echo "Connected:        $(count_connected_players) player(s)"
-  
-  # Additional server info if A2S is available
-  if command -v a2s &> /dev/null; then
-    echo "Server Info:"
-    local server_name
-    server_name=$(a2s info "${SERVER_IP}:${PORT}" 2>/dev/null | grep "name" | cut -d: -f2- | xargs || echo "N/A")
-    echo "  Server Name:    ${server_name}"
-    local max_players
-    max_players=$(a2s info "${SERVER_IP}:${PORT}" 2>/dev/null | grep "maxplayers" | cut -d: -f2- | xargs || echo "N/A")
-    echo "  Max Players:    ${max_players}"
+  [[ -n "${version}" ]] && echo "Version:          ${version}"
+
+  local player_count; player_count="$(count_connected_players)"
+  echo "Players:          ${player_count} connected"
+  if [[ "${player_count}" -gt 0 ]]; then
+    local names; names="$(get_connected_player_names)"
+    if [[ -n "${names}" ]]; then
+      while IFS= read -r name; do
+        echo "  - ${name}"
+      done <<< "${names}"
+    fi
   fi
-  
+
+  local last_save; last_save="$(get_last_save)"
+  [[ -n "${last_save}" ]] && echo "Last Save:        ${last_save}"
+
   printf "\n"
-  local join_code; join_code="$(get_join_code)"
-  local server_ip; server_ip="$(get_server_ip_from_logs)"
-  [[ -z "${server_ip}" ]] && server_ip="$(get_server_ip)"
-  
   echo "Connect:"
-  if [[ -n "${join_code}" ]]; then
-    echo "  Join Code:      ${join_code}"
-    echo "  Server:         ${server_ip}"
-  else
-    echo "  Server:         ${server_ip}"
-    echo "  Port:           ${PORT}"
-    echo "  (Join code appears after server starts)"
-  fi
+  local join_code; join_code="$(get_join_code)"
+  [[ -n "${join_code}" ]] && echo "  Join Code:      ${join_code}"
+  echo "  Server:         $(get_server_ip):${PORT}"
   echo "  Password:       ${PASSWORD}"
-  
+
   printf "\n"
   echo "Configuration:"
-  echo "  Public:         $([ "${PUBLIC}" -eq 1 ] && echo 'Yes' || echo 'No')"
+  echo "  Public:         $([[ "${PUBLIC}" == "1" ]] && echo 'Yes' || echo 'No')"
   echo "  Crossplay:      ${CROSSPLAY}"
-  
+
   printf "\n"
   echo "Storage:"
   [[ -f "${SAVEDIR}/${WORLD_NAME}.db" ]] && {
@@ -144,7 +140,7 @@ stats() {
     local backup_count; backup_count="$(ls -1 "${BACKUP_DIR}"/world-"${WORLD_NAME}"-*.tar.gz 2>/dev/null | wc -l)"
     echo "  Backups:        ${backup_count} file(s)"
   }
-  
+
   printf "\n"
   echo "═══════════════════════════════════════════════════════"
 }
@@ -160,14 +156,7 @@ update() {
 
 backup() {
   echo "[backup] Creating backup for world: $WORLD_NAME"
-  
-  # Check if server is running and stop it for clean backup
-  if is_running; then
-    echo "[backup] Server is running. Stopping for clean backup.."
-    stop
-    sleep 2  # Allow time for graceful shutdown
-  fi
-  
+
   # Validate backup directory exists
   mkdir -p "$BACKUP_DIR"
   
@@ -186,9 +175,9 @@ backup() {
   if tar -czf "$out" -C "$SAVEDIR" "$WORLD_NAME.db" "$WORLD_NAME.fwl"; then
     echo "[backup] OK. Backup completed successfully."
     
-    # Clean up old backups (keep last 10)
-    cd "$BACKUP_DIR"
-    ls -t | grep "^world-$WORLD_NAME-" | tail -n +11 | xargs -r rm
+    # Clean up old backups, keeping the most recent BACKUPS_KEEP
+    find "${BACKUP_DIR}" -maxdepth 1 -name "world-${WORLD_NAME}-*.tar.gz" \
+      | sort -r | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm --
   else
     echo "[backup] ERROR: Backup failed!"
     return 1
@@ -233,9 +222,11 @@ deploy() {
   # Install required system packages
   echo "[deploy] Installing required system packages..."
   if command -v apt-get &> /dev/null; then
-    # Debian/Ubuntu
+    # Debian/Ubuntu — steamcmd requires i386 and the multiverse repository
+    dpkg --add-architecture i386
+    add-apt-repository -y multiverse
     apt-get update
-    apt-get install -y lib32gcc-9-dev lib32stdc++6 lib32z1 steamcmd curl wget unzip
+    apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip
   elif command -v yum &> /dev/null; then
     # CentOS/RHEL/Fedora
     yum install -y glibc.i686 libstdc++.i686 zlib.i686 steamcmd curl wget unzip
@@ -246,15 +237,24 @@ deploy() {
     echo "[deploy] Warning: Could not detect package manager. Please install steamcmd manually."
   fi
   
-  # Check if SteamCMD is installed and working
-  if [[ ! -x "$(command -v steamcmd)" ]]; then
+  # Check if SteamCMD is installed — apt installs it to /usr/games/steamcmd which may not be in PATH
+  local steamcmd_bin
+  steamcmd_bin="$(command -v steamcmd 2>/dev/null || echo "")"
+  if [[ -z "${steamcmd_bin}" && -x "/usr/games/steamcmd" ]]; then
+    steamcmd_bin="/usr/games/steamcmd"
+  fi
+  if [[ -z "${steamcmd_bin}" ]]; then
     echo "[deploy] Error: SteamCMD not found. Please install it manually or ensure your package manager worked correctly."
-    echo "[deploy] You can try installing it manually with: sudo apt-get install steamcmd"
+    echo "[deploy] You can try installing it manually with:"
+    echo "[deploy]   sudo dpkg --add-architecture i386"
+    echo "[deploy]   sudo add-apt-repository multiverse"
+    echo "[deploy]   sudo apt-get update && sudo apt-get install steamcmd"
     exit 1
   fi
-  
+  echo "[deploy] Found SteamCMD at: ${steamcmd_bin}"
+
   # Test SteamCMD by running it with a simple command
-  if ! steamcmd +quit 2>/dev/null; then
+  if ! "${steamcmd_bin}" +quit 2>/dev/null; then
     echo "[deploy] Warning: SteamCMD test failed. Some functionality may be limited."
   fi
   
@@ -268,7 +268,7 @@ deploy() {
   fi
   
   # Install Valheim server using SteamCMD with better error handling
-  if ! steamcmd +login anonymous +force_install_dir "${server_dir}" +app_update 896660 validate +quit; then
+  if ! "${steamcmd_bin}" +login anonymous +force_install_dir "${server_dir}" +app_update 896660 validate +quit; then
     echo "[deploy] Error: Failed to install Valheim server via SteamCMD"
     exit 1
   fi
@@ -290,23 +290,15 @@ deploy() {
     chmod +x "${server_dir}/valheim_server.x86_64"
   fi
   
-  # Set up environment variables for the server directory
+  # Set SERVER_DIR in .env, preserving any other settings the user has configured
   echo "[deploy] Setting up environment variables..."
-  cat > "${SCRIPT_DIR}/.env" << EOF
-SERVER_DIR="${server_dir}"
-EOF
-  
-  # Ensure proper permissions on .env file
-  chmod 600 "${SCRIPT_DIR}/.env"
-  
-  # Update config.conf to use the new server directory
-  echo "[deploy] Updating configuration..."
-  
-  # Create a backup of the original config
-  cp "${SCRIPT_DIR}/config.conf" "${SCRIPT_DIR}/config.conf.backup"
-  
-  # Update SERVER_DIR in config.conf
-  sed -i "s|SERVER_DIR.*|SERVER_DIR=\"${server_dir}\"|" "${SCRIPT_DIR}/config.conf"
+  local env_file="${SCRIPT_DIR}/.env"
+  if [[ -f "${env_file}" ]] && grep -q "^SERVER_DIR=" "${env_file}"; then
+    sed -i "s|^SERVER_DIR=.*|SERVER_DIR=\"${server_dir}\"|" "${env_file}"
+  else
+    echo "SERVER_DIR=\"${server_dir}\"" >> "${env_file}"
+  fi
+  chmod 600 "${env_file}"
   
   echo "[deploy] Deployment complete!"
   echo "[deploy] Valheim server installed at: ${server_dir}"

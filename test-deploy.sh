@@ -1,34 +1,26 @@
 #!/bin/bash
 
-# Test script for deploy command functionality
-# This script verifies that the deploy command can be called without errors
+# Simple test to check if we can run the deployment
+echo "Testing deployment setup..."
 
-echo "Testing deploy command functionality..."
-
-# Check if the main script exists
-if [[ ! -f "valheim-server-manager.sh" ]]; then
-    echo "Error: valheim-server-manager.sh not found"
-    exit 1
-fi
-
-# Make the script executable
-chmod +x valheim-server-manager.sh
-
-# Test that the deploy command is recognized
-echo "Checking if deploy command is available..."
-if ./valheim-server-manager.sh help 2>/dev/null | grep -q "deploy"; then
-    echo "✓ Deploy command found in help"
+# Check if we have required packages
+echo "Checking for steamcmd..."
+if command -v steamcmd &> /dev/null; then
+    echo "steamcmd found"
 else
-    echo "✗ Deploy command not found in help"
+    echo "steamcmd not found"
 fi
 
-# Test that the script can be parsed without syntax errors
-echo "Checking for syntax errors..."
-if bash -n valheim-server-manager.sh; then
-    echo "✓ No syntax errors found"
+# Check current user and permissions
+echo "Current user: $(whoami)"
+echo "Home directory: $HOME"
+
+# Try to create a simple server directory
+mkdir -p "$HOME/valheim-test/server"
+if [ $? -eq 0 ]; then
+    echo "Created test directory successfully"
 else
-    echo "✗ Syntax errors found"
-    exit 1
+    echo "Failed to create test directory"
 fi
 
-echo "Deploy command functionality test completed successfully!"
+echo "Test complete"

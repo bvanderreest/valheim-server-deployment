@@ -1,422 +1,260 @@
 # 🛡 Valheim Dedicated Server Manager
 
-A resilient, production-ready Bash management script for running a **Valheim Dedicated Server** on Linux. This project provides clean lifecycle management, SteamCMD updates, automatic world backups, crash recovery, and configurable gameplay modifiers --- split across four modular files for clean separation of configuration, helpers, and commands. Perfect for homelab operators and server administrators looking for a robust, easy-to-use solution to host your own Valheim server!
+A resilient, production-ready Bash management script for running a **Valheim Dedicated Server** on Linux. Handles the full server lifecycle — deployment, updates, backups, crash recovery, and configurable gameplay modifiers — split across modular files for clean separation of configuration, helpers, and commands. Perfect for homelab operators and server administrators who want a robust, easy-to-use solution.
 
 ## 🚀 Key Features
 
-- **🎮 Game Modifiers**: Advanced modifier system with 5 customization levels (basic, preset, standard, hardcore, custom)
-- **⚡ Power Loss Resilience**: Automatic world corruption guard + restore
-- **💾 Automated Backups**: Rotating world backups with automatic restoration
+- **⚡ One-Command Deploy**: Install the server and all dependencies with a single command
+- **🎮 Game Modifiers**: Tiered modifier system (basic, standard, hardcore, custom, preset)
+- **⚡ Power Loss Resilience**: Automatic world corruption guard + restore on startup
+- **💾 Live Backups**: Rotating world backups without stopping the server
 - **🔄 SteamCMD Updates**: Auto-update support for Valheim server (AppID 896660)
-- **🌍 Crossplay Support**: Steam + Xbox cross-platform support
-- **📊 Enhanced Monitoring**: Real-time player monitoring with A2S protocol support
-- **🔧 Modular Design**: Clean separation of configuration, helpers, and commands
-- **🛡 Production Ready**: Designed for high uptime and reliable operation
-
-------------------------------------------------------------------------
-
-## ✨ Features
-
--   ✅ Start / Stop / Restart / Status commands
--   📦 SteamCMD auto-update support (AppID 896660)
--   💾 Automated rotating world backups
--   ⚡ Power-loss world corruption guard + restore
--   🌍 Crossplay support (PlayFab relay)
--   📜 Log management
--   🛠 Fully configurable paths and settings
--   📊 Enhanced player monitoring with A2S protocol support
+- **🌍 Crossplay Support**: Steam + Xbox cross-platform via PlayFab relay
+- **📊 Server Stats**: Real-time status, uptime, player count, and connect info
+- **🔧 Modular Design**: Config, helpers, and commands cleanly separated
 
 ------------------------------------------------------------------------
 
 ## 📋 Prerequisites
 
-Before using this management script, you must install:
-
--   Linux server (Ubuntu/Debian recommended)
--   SteamCMD (can be installed via package manager or manual download)
--   Valheim Dedicated Server (AppID 896660)
--   Required system libraries (for Ubuntu/Debian):
-    - `lib32gcc-s1` (for 32-bit compatibility)
-    - `libpulse0` (for audio support)
-    - `libatomic1` (for atomic operations)
-    - `libc6` (for core system functions)
-    - `libstdc++6` (for C++ standard library)
+- Linux server (Ubuntu/Debian recommended)
+- `sudo` / root access (required for `deploy`)
+- Internet access (SteamCMD downloads ~1 GB of server files)
 
 ------------------------------------------------------------------------
 
-------------------------------------------------------------------------
+## 🚀 Quick Start
 
-# 🚀 Installing Valheim Dedicated Server
+### 1️ — Clone and configure
 
-Official documentation:
-https://valheim.fandom.com/wiki/Valheim_Dedicated_Server
+```bash
+git clone <repo-url>
+cd Valheim-Server-Deployment
+cp env.example .env
+```
 
-## 1️ - Install Required System Libraries
+Edit `.env` with your server settings:
 
-For Ubuntu/Debian systems, install the required libraries:
+```bash
+SERVER_NAME="My Valheim Server"
+WORLD_NAME="MyWorld"
+PASSWORD="serverpassword123"   # min 5 chars, cannot contain the world name
+```
 
-    sudo apt update
-    sudo apt install lib32gcc-s1 libpulse0 libatomic1 libc6 libstdc++6
+### 2️ — Deploy
 
-## 2️ - Install SteamCMD
+```bash
+sudo ./valheim-server-manager.sh deploy
+```
 
-Ubuntu / Debian:
+This single command:
+- Enables 32-bit support (`dpkg --add-architecture i386`)
+- Adds the multiverse repository
+- Installs SteamCMD and required libraries
+- Downloads the Valheim dedicated server via SteamCMD (AppID 896660)
+- Sets up the `server/` directory and writes your `SERVER_DIR` to `.env`
 
-    sudo apt update
-    sudo apt install software-properties-common
-    sudo add-apt-repository multiverse
-    sudo dpkg --add-architecture i386
-    sudo apt update
-    sudo apt install steamcmd
+### 3️ — Start
 
-Verify installation:
-
-    steamcmd
-
-------------------------------------------------------------------------
-
-## 3 - Install Valheim Dedicated Server
-
-Launch SteamCMD:
-
-    steamcmd
-
-Inside SteamCMD:
-
-    force_install_dir /home/{USER}/server
-    login anonymous
-    app_update 896660 validate
-    quit
+```bash
+./valheim-server-manager.sh start
+```
 
 ------------------------------------------------------------------------
-
-# ⚙️ Setup This Manager Script
 
 ## 📂 File Structure
 
-This project consists of three modular files:
-
-- **config.conf** — Core configuration (server name, ports, paths, backup, SteamCMD settings)
-- **modifiers-base.conf** — Game modifiers and presets (easily customizable gameplay rules)
-- **modifiers.conf** — User-specific modifier settings (not updated with releases)
-- **helpers.sh** — Reusable helper functions (ensure_paths, build_args, is_running, guard_world)
-- **valheim-server-manager.sh** — Main script with commands (start, stop, restart, status, logs, update, backup)
-- **valheim-monitor.sh** — Standalone monitoring script for external use
-
-### Benefits of This Architecture
-- **Easy Configuration** — Update settings in `config.conf` or `modifiers-user.conf` without touching script logic
-- **Focused Files** — Game modifiers separated for easy experimentation and version control
-- **Reusable Helpers** — Functions in `helpers.sh` can be sourced by other scripts if needed
-- **Clean Separation** — Clear organization of concerns (config, modifiers, utilities, commands)
-- **Maintainable** — Each file has a single, clear responsibility
-
-## 📦 Deployment
-
-1.  **Copy all files to your server:**
- 
-        config.conf
-        modifiers-base.conf
-        modifiers-user.conf
-        helpers.sh
-        valheim-server-manager.sh
-        valheim-monitor.sh
-
-2.  **Create a `.env` file for client-side configurations:**
- 
-    Create a `.env` file in the same directory with your server settings. This file will feed into `config.conf` and provide defaults in case it doesn't exist.
- 
-    Copy the `env.example` file to `.env` and customize it with your server settings:
-    
-    ```bash
-    cp env.example .env
-    ```
-    
-    ```bash
-    SERVER_NAME="My Valheim Server"
-    WORLD_NAME="MyWorld"
-    PASSWORD="serverpassword123"
- 
-    # Password Requirements:
-    # - Minimum 5 characters
-    # - Cannot contain or match the world name
-    ```
- 
-3.  **Customize `config.conf` for your server setup:**
- 
-    The `config.conf` file now reads from `.env` with defaults. You can still customize it directly, but it's recommended to use `.env` for client-side configurations.
- 
-4.  **(Optional) Customize `modifiers.conf` for gameplay rules:**
- 
-    The modifier system uses a single file:
-    - `modifiers.conf` - User-specific modifier settings (not updated with releases)
- 
-    When you first run the manager, `modifiers.conf` will be automatically created from `modifiers.example.conf`.
-    Edit `modifiers.conf` to adjust settings to your preferences.
- 
-    ```bash
-    ## First, select your desired customization level
-    DEFAULT_MODIFIER_GROUP="standard"  # or "basic", "preset", "hardcore", "custom"
-    
-    ## Then configure specific settings
-    PRESET="normal"  # or casual, easy, normal, hard, hardcore, immersive, hammer
-    # BASIC_MODIFIERS=( "Combat=hard" "Resources=less" ... )
-    # ADVANCED_MODIFIERS=( "EnemyLevelUpRate=120" ... )
-    # EXPERT_MODIFIERS=( "EnemySpeedSize=150" ... )
-    # SETKEYS=( "nomap" ... )
-    ```
- 
- For detailed information about the enhanced modifier system, please refer to the [MODIFIERS.md](MODIFIERS.md) file.
- 
- ## Modifier System Overview
- 
- The modifier system has been restructured to provide better usability:
- 1. **First, select your customization level** - Choose from preset, standard, hardcore, or custom
- 2. **Then configure specific settings** - Modify presets, modifiers, and setkeys as needed
- 
- This upfront selection makes it easier to understand what configuration options are available before diving into details.
-
-## New "Preset" Modifier Group
-
-A new "preset" modifier group has been added that allows you to use only the preset configuration without any additional modifiers (basic, advanced, or expert). To use this option:
-
-1. Set `DEFAULT_MODIFIER_GROUP="preset"` in `modifiers-user.conf`
-2. Or manually configure the following settings:
-   - `ENABLE_BASIC_MODIFIERS=false`
-   - `ENABLE_ADVANCED_MODIFIERS=false`
-   - `ENABLE_EXPERT_MODIFIERS=false`
-   - `ENABLE_CUSTOM_MODIFIERS=false`
-
-## Important Paths
-
-All paths are configured in `config.conf`. Adjust as needed:
-
-    SERVER_DIR="/path/to/valheim"
-    SAVEDIR="/srv/valheim/worlds"
-    LOG_DIR="/srv/valheim/logs"
-    BACKUP_DIR="/srv/valheim/backups"
-
-### Server Directory Configuration
-
-The `SERVER_DIR` can be configured for different installation methods:
-
-- **Standard Steam Installation:** `/home/steam/valheim/valheim_server`
-- **Snap Installation:** `/home/{USER}/snap/steam/common/.local/share/Steam/steamapps/common/Valheim dedicated server`
-- **Custom Installation:** Specify your own path
-
-The script will use the path defined in `SERVER_DIR` or default to `/home/steam/valheim_server` if not set.
-
-### Server Directory Configuration
-
-The `SERVER_DIR` can be configured for different installation methods:
-
-- **Standard Steam Installation:** `/home/steam/valheim/valheim_server`
-- **Snap Installation:** `/home/vdrvalheim/snap/steam/common/.local/share/Steam/steamapps/common/Valheim dedicated server`
-- **Custom Installation:** Specify your own path
-
-The script will use the path defined in `SERVER_DIR` or default to `/home/steam/valheim/valheim_server` if not set.
-
-## Make Executable
-
-On Linux systems, make the script executable:
-    
-    chmod +x valheim-server-manager.sh
-
-## Enhanced Monitoring
-
-The server manager now supports enhanced player monitoring:
-- Uses A2S protocol for real-time accurate player counts
-- Falls back to log parsing when A2S is not available
-- Includes additional server information in stats output
-- Provides a standalone monitoring script `valheim-monitor.sh` for external use
-
-To use A2S protocol, install the python-valve package:
 ```
-pip install python-valve
+Valheim-Server-Deployment/
+├── valheim-server-manager.sh   # Main script — all commands live here
+├── valheim-monitor.sh          # Standalone monitoring script (text or JSON output)
+├── config.conf                 # Core config: paths, ports, SteamCMD, backup settings
+├── helpers.sh                  # Shared functions: build_args, guard_world, backups, etc.
+├── modifiers.example.conf      # Modifier template — copy to modifiers.conf to customise
+├── modifiers.conf              # Your modifier settings (not overwritten on update)
+├── env.example                 # Environment variable template
+├── .env                        # Your local settings (gitignored)
+└── server/                     # Valheim server files (created by deploy)
 ```
 
-The monitoring script can be used externally:
+------------------------------------------------------------------------
+
+## ⚙️ Configuration
+
+### `.env` — Your server identity
+
+Created from `env.example`. Override any `config.conf` default here. Gitignored so your passwords stay safe.
+
+```bash
+SERVER_NAME="My Valheim Server"
+WORLD_NAME="MyWorld"
+PASSWORD="serverpassword123"
+PORT=2456
+PUBLIC=1
+CROSSPLAY=true
+STEAMCMD_BIN="/usr/games/steamcmd"
+SAVEDIR="/srv/valheim/worlds"
+LOG_DIR="/srv/valheim/logs"
+BACKUP_DIR="/srv/valheim/backups"
 ```
+
+### `modifiers.conf` — Gameplay rules
+
+Created automatically from `modifiers.example.conf` on first run. Customise without worrying about it being overwritten.
+
+```bash
+# Pick your tier: preset | basic | standard | hardcore | custom
+DEFAULT_MODIFIER_GROUP="standard"
+
+# Baseline preset: casual | easy | normal | hard | hardcore | immersive | hammer
+PRESET="normal"
+
+# The 5 official vanilla modifier categories
+BASIC_MODIFIERS=(
+    "Combat=easy"
+    "DeathPenalty=easy"
+    "Resources=more"
+    "Raids=less"
+    "Portals=casual"
+)
+```
+
+> **Note on modifier tiers:** `BASIC_MODIFIERS` maps to the 5 vanilla `-modifier` categories. `ADVANCED_MODIFIERS` and `EXPERT_MODIFIERS` are reserved for modded servers (e.g. ValheimPlus). `SETKEYS` are game-world toggles like `nomap` or `noevent` — all commented out by default since they're drastic changes.
+
+See [MODIFIERS.md](MODIFIERS.md) for full details.
+
+------------------------------------------------------------------------
+
+## 🎮 Usage
+
+```bash
+./valheim-server-manager.sh <command>
+```
+
+| Command   | Description |
+|-----------|-------------|
+| `deploy`  | Install SteamCMD, dependencies, and download the Valheim server |
+| `start`   | Start the server (restores from backup if world files are missing/corrupt) |
+| `stop`    | Gracefully stop the server (SIGINT → SIGTERM → SIGKILL) |
+| `restart` | Stop then start |
+| `stats`   | Show server status, uptime, player count, and connection info |
+| `logs`    | Tail the server log live |
+| `update`  | Stop server, update via SteamCMD, restart |
+| `backup`  | Create a timestamped world backup (server stays running) |
+
+------------------------------------------------------------------------
+
+## 🔄 Updates
+
+```bash
+./valheim-server-manager.sh update
+```
+
+Stops the server, pulls the latest Valheim server build via SteamCMD, then exits (run `start` to bring it back up). Requires `USE_STEAMCMD_UPDATE=true` in `.env`.
+
+------------------------------------------------------------------------
+
+## 💾 Backup & Recovery
+
+### Manual backup
+
+```bash
+./valheim-server-manager.sh backup
+```
+
+Creates `world-<WORLD_NAME>-<timestamp>.tar.gz` in `BACKUP_DIR`. The server stays running — Valheim flushes saves on `SAVE_INTERVAL` so live backups are safe.
+
+### Automatic in-game backups
+
+The server's built-in backup flags are passed on start:
+
+```
+-saveinterval 300    # flush world to disk every 5 min
+-backups 12          # keep 12 rolling backups
+-backupshort 900     # first backup after 15 min
+-backuplong 3600     # subsequent backups every 60 min
+```
+
+### Corruption guard
+
+On `start`, the manager checks whether the world `.db` and `.fwl` files exist and are non-empty. If they're missing or zero-sized (common after a power cut or forced shutdown), it automatically restores from the most recent backup before launching.
+
+------------------------------------------------------------------------
+
+## 🌍 Crossplay
+
+Enable in `.env`:
+
+```bash
+CROSSPLAY=true
+```
+
+Adds `-crossplay` to the server launch args, enabling the PlayFab relay for Steam + Xbox cross-platform play.
+
+------------------------------------------------------------------------
+
+## 📊 Monitoring
+
+```bash
+./valheim-server-manager.sh stats
+```
+
+Shows live status, uptime, player count, join code (when available), connection details, world size, and backup count.
+
+The standalone monitor script supports JSON output for integration with external tools:
+
+```bash
 ./valheim-monitor.sh monitor json
 ```
 
 ------------------------------------------------------------------------
 
-# 🎮 Usage
+## 📁 Recommended Directory Layout
 
-```bash
-./valheim-server-manager.sh start
-./valheim-server-manager.sh stop
-./valheim-server-manager.sh restart
-./valheim-server-manager.sh stats
-./valheim-server-manager.sh logs
-./valheim-server-manager.sh update
-./valheim-server-manager.sh backup
-./valheim-server-manager.sh deploy
+```
+/srv/valheim/
+├── worlds/       # world save files (SAVEDIR)
+├── logs/         # server log (LOG_DIR)
+├── backups/      # timestamped tarballs (BACKUP_DIR)
+└── valheim.pid   # PID file (PIDFILE)
 ```
 
-## Deployment Process
+### Directory permissions
 
-The `deploy` command will install the Valheim server in a dedicated `server` directory within the script's folder. After deployment:
-1. Run `./valheim-server-manager.sh deploy` to install the server
-2. Run `./valheim-server-manager.sh start` to start the server
-
-The default server path is set to `${SCRIPT_DIR}/server/`, which will be automatically configured in your `.env` file after deployment.
-
-## SteamCMD and steamclient.so Notes
-
-Valheim requires proper Steam runtime libraries. The deploy command:
-- Installs required system packages including 32-bit libraries
-- Uses SteamCMD to download the server binaries
-- The `steamclient.so` library should be automatically detected by the server
-- For dedicated servers, `steamclient.so` is typically not required for basic functionality
-- If you encounter issues with Steam features, ensure your system has proper 32-bit compatibility libraries
-- You can verify the installation by checking that `valheim_server.x86_64` exists in your server directory
-
-------------------------------------------------------------------------
-
-# 🔄 Automatic Updates
-
-If enabled in `config.conf`:
-
-    USE_STEAMCMD_UPDATE=true
-
-Run:
-
-    ./valheim-server-manager.sh update
-
-This will: - Stop server - Update via SteamCMD - Validate installation
-
-------------------------------------------------------------------------
-
-# 💾 Backup & Recovery
-
-### Automatic Backups
-
-Uses official server flags:
-
--   -backups
--   -backupshort
--   -backuplong
--   -saveinterval
-
-Backups stored as:
-
-    world-<WORLD_NAME>-<timestamp>.tar.gz
-
-### Corruption Guard
-
-On start:
-
--   Checks for missing or zero-sized `.db` / `.fwl`
--   Restores most recent backup automatically
-
-Designed for resilience after: - Power loss - VM crashes - Forced
-shutdowns
-
-------------------------------------------------------------------------
-
-# 🌍 Crossplay Support
-
-Enable in `config.conf`:
-
-    CROSSPLAY=true
-
-Adds:
-
-    -crossplay
-
-Allows Steam + Xbox cross-platform support.
-
-------------------------------------------------------------------------
-
-# 📁 Recommended Directory Structure
-
-    /srv/valheim/
-    ├── worlds/
-    ├── logs/
-    ├── backups/
-    └── valheim.pid
-
-## 🔐 Directory Permissions
-
-For optimal security and functionality, the following directory permissions are recommended:
-
-- **/srv/valheim/**: Owner `valheim:valheim`, permissions `755`
-- **/srv/valheim/worlds/**: Owner `valheim:valheim`, permissions `755`
-- **/srv/valheim/logs/**: Owner `valheim:valheim`, permissions `755`
-- **/srv/valheim/backups/**: Owner `valheim:valheim`, permissions `755`
-
-To set these permissions:
 ```bash
 sudo mkdir -p /srv/valheim/{worlds,logs,backups}
+sudo useradd -r -m -U -d /srv/valheim valheim
 sudo chown -R valheim:valheim /srv/valheim
 sudo chmod -R 755 /srv/valheim
 ```
 
-The `valheim` user should be created with:
-```bash
-sudo useradd -r -m -U -d /srv/valheim valheim
-```
+------------------------------------------------------------------------
 
-This ensures the server process can read and write to all necessary directories while maintaining proper security isolation.
+## 🔐 Security Recommendations
+
+- Run under a dedicated `valheim` user — do not run as root for day-to-day operation (`deploy` is the exception)
+- Open UDP ports **2456** and **2457** in your firewall
+- Keep `.env` out of version control (already in `.gitignore`)
+- Use a strong password (minimum 5 characters, must not contain or match the world name)
 
 ------------------------------------------------------------------------
 
-# 🔐 Security Recommendations
+## 🙌 Built For Homelab Operators
 
--   Run under dedicated `valheim` user
--   Do not run as root
--   Open ports 2456 and 2457
--   Use firewall rules appropriately
+Designed for self-hosted environments that need:
 
-------------------------------------------------------------------------
-
-# 📜 License
-
-MIT License
-
-Copyright (c) 2024 Valheim Server Manager
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-# 🛡 Security & Version Control
-
-Sensitive configuration data should never be committed to version control. The `.env` file is automatically excluded from Git by the included `.gitignore` file. Always create your own `.env` file with your specific server settings and keep it private.
+- High uptime with automatic crash + corruption recovery
+- Simple operational control without babysitting
+- Flexible gameplay configuration for your community
 
 ------------------------------------------------------------------------
 
-# 🙌 Built For Homelab Operators
+## 📜 License
 
-Designed for self-hosted environments requiring:
+MIT License — Copyright (c) 2024 Valheim Server Manager
 
--   High uptime
--   Backup resilience
--   Simple operational control
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-## 🌟 Why Choose This Manager?
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-This Valheim server manager stands out because it combines:
-
-- **Production-Ready Stability**: Built with resilience in mind, including automatic corruption recovery
-- **Modular Architecture**: Clean separation of concerns makes customization easy
-- **Comprehensive Features**: Everything you need in one package - updates, backups, monitoring, and more
-- **Easy Deployment**: Simple setup process with clear documentation
-- **Flexible Gameplay**: Advanced modifier system with 5 customization levels to suit any playstyle
-
-Perfect for both casual players wanting to host their own server and experienced administrators looking for a reliable solution.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

@@ -7,6 +7,15 @@
 
 ensure_paths() { mkdir -p "${SAVEDIR}" "${LOG_DIR}" "${BACKUP_DIR}"; }
 
+rotate_log() {
+  if [[ -f "${LOGFILE}" && -s "${LOGFILE}" ]]; then
+    local ts; ts="$(date +"%Y-%m-%d_%H-%M-%S")"
+    local base="${LOGFILE%.log}"
+    mv "${LOGFILE}" "${base}-${ts}.log"
+    echo "[rotate_log] Previous log archived to ${base}-${ts}.log"
+  fi
+}
+
 # Function to set modifier group variables based on DEFAULT_MODIFIER_GROUP
 set_modifier_group() {
   # Default to standard if not set
@@ -51,7 +60,7 @@ set_modifier_group() {
 
 build_args() {
   # Check if modifiers.conf exists, if not, create it from the example
-  local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local script_dir; script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   if [[ ! -f "${script_dir}/modifiers.conf" ]]; then
     if [[ -f "${script_dir}/modifiers.example.conf" ]]; then
       cp "${script_dir}/modifiers.example.conf" "${script_dir}/modifiers.conf"
@@ -62,11 +71,10 @@ build_args() {
     fi
   fi
   
-  # Source user configuration
-  source "${script_dir}/modifiers.conf"
-  
-  # Set modifier group variables based on DEFAULT_MODIFIER_GROUP
+  # Set ENABLE_* defaults from DEFAULT_MODIFIER_GROUP (already loaded by config.conf),
+  # then source modifiers.conf so any explicit ENABLE_* lines in that file take precedence.
   set_modifier_group
+  source "${script_dir}/modifiers.conf"
   
   local args=()
   args+=( -nographics -batchmode )
@@ -108,6 +116,11 @@ build_args() {
     done
   fi
   
+  # Process setkeys
+  for key in "${SETKEYS[@]}"; do
+    [[ -n "${key}" ]] && args+=( -setkey "${key}" )
+  done
+
   # Process custom arguments
   if [[ "${ENABLE_CUSTOM_ARGS}" == "true" ]]; then
     for arg in "${CUSTOM_ARGS[@]}"; do
@@ -115,7 +128,7 @@ build_args() {
     done
   fi
   
-  echo "${args[@]}"
+  printf '%s\n' "${args[@]}"
 }
 
 is_running() { [[ -f "${PIDFILE}" ]] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; }
@@ -167,60 +180,63 @@ format_uptime() {
 
 count_connected_players() {
   if ! is_running; then echo "0"; return; fi
-  
+
   # Try A2S query first (most accurate)
   if command -v a2s &> /dev/null; then
+    local query_ip; query_ip="$(get_server_ip)"
     local player_count
-    player_count=$(a2s players "${SERVER_IP}:${PORT}" 2>/dev/null | grep -c "Player" || echo "0")
+    player_count=$(a2s players "${query_ip}:${PORT}" 2>/dev/null | grep -c "Player" || echo "0")
     echo "$player_count"
     return
   fi
-  
-  # Fallback to log parsing
-  local log
-  log="$(tail -n 500 "${LOGFILE}" 2>/dev/null || echo "")"
-  local count
-  count=$(echo "$log" | grep -c "Connected player" || echo "0")
-  echo "$count"
+
+  # Fallback: net count from log (peers connected minus disconnects)
+  local log_tail
+  log_tail="$(tail -n 2000 "${LOGFILE}" 2>/dev/null || echo "")"
+  local connected disconnected net
+  connected=$(echo "$log_tail" | grep -c "Server: New peer connected" || true)
+  disconnected=$(echo "$log_tail" | grep -c "RPC_Disconnect" || true)
+  net=$(( connected - disconnected ))
+  echo "$(( net < 0 ? 0 : net ))"
+}
+
+get_connected_player_names() {
+  if ! is_running; then echo ""; return; fi
+  tail -n 2000 "${LOGFILE}" 2>/dev/null \
+    | grep "Got character ZDOID from" \
+    | grep -v " 0:0$" \
+    | sed 's/.*Got character ZDOID from //; s/ *:.*$//' \
+    | sed 's/[[:space:]]*$//' \
+    | sort -u
 }
 
 get_join_code() {
   if ! is_running; then echo ""; return; fi
   local log; log="$(tail -n 200 "${LOGFILE}" 2>/dev/null || echo "")"
-  echo "$log" | grep -oE "Join code: [0-9a-zA-Z]{6}" | cut -d' ' -f2 || echo ""
+  echo "$log" | grep -oE "Join code: [0-9a-zA-Z]{6}" | tail -1 | cut -d' ' -f3 || echo ""
 }
 
-get_server_ip_from_logs() {
+get_valheim_version() {
+  grep -m1 "Valheim version:" "${LOGFILE}" 2>/dev/null \
+    | sed 's/.*Valheim version: //' || echo ""
+}
+
+get_game_server_status() {
   if ! is_running; then echo ""; return; fi
-  local log; log="$(tail -n 200 "${LOGFILE}" 2>/dev/null || echo "")"
-  echo "$log" | grep -oE "Server IP: [0-9.]{7,15}" | cut -d' ' -f2 || echo ""
+  tail -n 500 "${LOGFILE}" 2>/dev/null \
+    | grep "Game server" \
+    | tail -1 \
+    | sed 's/.*Game server //' || echo ""
+}
+
+get_last_save() {
+  if ! is_running; then echo ""; return; fi
+  grep "World saved" "${LOGFILE}" 2>/dev/null \
+    | tail -1 \
+    | grep -oE "[0-9]{2}/[0-9]{2}/[0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2}" || echo ""
 }
 
 get_server_ip() {
-  # Get server IP address
   local ip; ip="$(hostname -I 2>/dev/null | cut -d' ' -f1 || echo "")"
   [[ -n "${ip}" ]] && echo "${ip}" || echo "127.0.0.1"
-}
-
-# Enhanced monitoring function for external use
-monitor_server() {
-  local output_format="${1:-text}"  # text or json
-  
-  if [[ "${output_format}" == "json" ]]; then
-    echo "{"
-    echo "  \"status\": \"$(is_running && echo "running" || echo "stopped")\","
-    echo "  \"players\": \"$(count_connected_players)\","
-    echo "  \"server_name\": \"${SERVER_NAME}\","
-    echo "  \"world\": \"${WORLD_NAME}\","
-    echo "  \"port\": \"${PORT}\","
-    echo "  \"public\": \"${PUBLIC}\""
-    echo "}"
-  else
-    echo "Server Status:"
-    echo "  Status: $(is_running && echo "Running" || echo "Stopped")"
-    echo "  Players: $(count_connected_players)"
-    echo "  Server: ${SERVER_NAME}"
-    echo "  World: ${WORLD_NAME}"
-    echo "  Port: ${PORT}"
-  fi
 }
