@@ -15,6 +15,8 @@
 | `helpers.sh` | Shared functions used by the manager |
 | `env.example` | Template for your `.env` file |
 | `modifiers.example.conf` | Template for gameplay modifier settings |
+| `api-manager.sh` | Process manager for the HTTP API (start/stop/restart/status) |
+| `api/` | FastAPI application — exposes server status and commands over HTTP |
 
 ---
 
@@ -192,6 +194,44 @@ The standalone monitor script also supports JSON output for dashboards or extern
 
 ---
 
+## Management API
+
+An optional HTTP API built with FastAPI exposes server status and control commands over a secure REST interface. It is designed to integrate with a centralised web dashboard that manages multiple game servers (Valheim, 7 Days to Die, etc.).
+
+### Endpoints at a glance
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | None | Uptime check — returns server identity |
+| GET | `/status` | Key | Full status: running state, players, uptime, version, join code |
+| POST | `/server/start` | Key | Start the server |
+| POST | `/server/stop` | Key | Stop the server |
+| POST | `/server/restart` | Key | Restart the server |
+| POST | `/server/backup` | Key | Trigger a live backup |
+| GET | `/logs?lines=100` | Key | Recent log lines |
+| GET | `/logs/stream` | Key | Live log tail via Server-Sent Events |
+
+All authenticated endpoints require an `X-API-Key` header. The API will not start unless `API_ENABLED=true` is set in `.env`.
+
+### Quick setup
+
+```bash
+# Install dependencies
+python3 -m venv .venv && .venv/bin/pip install -r api/requirements.txt
+
+# Generate an API key and add it to .env
+python3 -c "import secrets; print(secrets.token_hex(32))"
+# In .env: set API_KEYS="<key>" and API_ENABLED=true
+
+# Start the API
+./api-manager.sh start
+./api-manager.sh status
+```
+
+See [api/README.md](api/README.md) for full configuration, nginx HTTPS setup, systemd service, and multi-server dashboard integration.
+
+---
+
 ## Recommended Directory Layout
 
 ```
@@ -242,6 +282,7 @@ Stops the server, downloads the latest Valheim build via SteamCMD, then exits cl
 - **Open the right ports.** Valheim needs UDP **2456** and **2457** open in your firewall.
 - **Keep `.env` private.** It's already in `.gitignore`. Never commit passwords or paths.
 - **Choose a strong password.** Minimum 5 characters. Must not contain or match `WORLD_NAME`.
+- **API is opt-in.** The Management API is disabled by default (`API_ENABLED=false`). Only enable it when you have set a strong `API_KEYS` value and have HTTPS in place via a reverse proxy.
 
 ---
 

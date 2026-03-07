@@ -1,0 +1,48 @@
+# Valheim Server Management API — systemd service unit
+#
+# SETUP:
+#   1. Edit WorkingDirectory and ExecStart paths below to match your deployment
+#   2. Ensure API_ENABLED=true and API_KEYS are set in your .env
+#   3. Copy to /etc/systemd/system/valheim-api.service
+#   4. Run: sudo systemctl daemon-reload && sudo systemctl enable --now valheim-api
+#
+# ALTERNATIVE: Use api-manager.sh for manual process management without systemd.
+
+[Unit]
+Description=Valheim Server Management API
+After=network.target
+# Optionally start after the Valheim server itself if you use a separate service for it:
+# After=valheim-server.service
+
+[Service]
+Type=simple
+User=valheim
+Group=valheim
+
+# Adjust this path to where the repository is deployed
+WorkingDirectory=/opt/valheim-server-deployment
+
+# Use the virtualenv created by: python3 -m venv .venv && pip install -r api/requirements.txt
+ExecStart=/opt/valheim-server-deployment/.venv/bin/uvicorn api.main:app \
+    --host 127.0.0.1 \
+    --port 8080 \
+    --workers 1 \
+    --log-level info \
+    --access-log
+
+# IMPORTANT: --workers 1 is required. The in-memory rate limiter in auth.py
+# is not shared across processes. If you need multiple workers, replace the
+# rate limiter with a Redis-backed store first.
+
+Restart=on-failure
+RestartSec=5
+
+# Load the same .env that the Valheim server manager uses
+EnvironmentFile=/opt/valheim-server-deployment/.env
+
+# Basic security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
