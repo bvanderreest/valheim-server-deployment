@@ -1,17 +1,38 @@
-# Valheim Server Management API
+# 🌐 Valheim Server Management API
+
+![Python](https://img.shields.io/badge/python-3.11+-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-async-009688?logo=fastapi&logoColor=white)
+![Auth](https://img.shields.io/badge/auth-API_Key-orange)
 
 A FastAPI application that exposes the Valheim server's status and control commands over HTTP. Designed to be consumed by a centralised game server dashboard alongside APIs from other game servers (7 Days to Die, etc.).
 
-## Security model
+---
 
-- All endpoints except `GET /health` require an `X-API-Key` header.
-- Failed authentication attempts are rate-limited (5 per IP per 15 minutes → `429`).
-- The API binds to `127.0.0.1` only; HTTPS is handled by a reverse proxy (nginx).
-- The API will **not start** unless `API_ENABLED=true` is set in `.env`.
+## 📋 Contents
+
+- [🔐 Security Model](#-security-model)
+- [📋 Prerequisites](#-prerequisites)
+- [⚡ Installation](#-installation)
+- [🔧 Configuration](#-configuration)
+- [▶️ Managing the API Process](#️-managing-the-api-process)
+- [📡 Endpoints](#-endpoints)
+- [💻 Example Usage](#-example-usage)
+- [🔒 nginx Reverse Proxy (HTTPS)](#-nginx-reverse-proxy-https)
+- [♻️ Adapting for Other Game Servers](#️-adapting-for-other-game-servers)
+- [📝 Notes](#-notes)
 
 ---
 
-## Prerequisites
+## 🔐 Security Model
+
+- All endpoints except `GET /health` require an `X-API-Key` header
+- Failed authentication attempts are rate-limited (5 per IP per 15 minutes → `429`)
+- The API binds to `127.0.0.1` only; HTTPS is handled by a reverse proxy (nginx)
+- The API will **not start** unless `API_ENABLED=true` is set in `.env`
+
+---
+
+## 📋 Prerequisites
 
 - Python 3.11+
 - The Valheim server manager already deployed (`valheim-server-manager.sh` present)
@@ -19,7 +40,7 @@ A FastAPI application that exposes the Valheim server's status and control comma
 
 ---
 
-## Installation
+## ⚡ Installation
 
 From the repository root:
 
@@ -30,7 +51,7 @@ python3 -m venv .venv
 
 ---
 
-## Configuration
+## 🔧 Configuration
 
 All configuration lives in the same `.env` file used by the Valheim server scripts. Add or update these variables:
 
@@ -68,7 +89,7 @@ The following existing `.env` variables are also read by the API:
 
 ---
 
-## Managing the API process
+## ▶️ Managing the API Process
 
 Use `api-manager.sh` from the repository root:
 
@@ -93,7 +114,7 @@ sudo journalctl -u valheim-api -f   # Follow logs
 
 ---
 
-## Endpoints
+## 📡 Endpoints
 
 ### `GET /health` — No auth required
 
@@ -136,9 +157,9 @@ Action endpoints return `202 Accepted` immediately. The underlying manager scrip
 { "accepted": true, "message": "Start command accepted. Check /status for progress." }
 ```
 
-- `start`: returns `409` if already running
-- `stop`: returns `409` if not running
-- `backup`: returns `409` if not running
+- `start` returns `409` if already running
+- `stop` returns `409` if not running
+- `backup` returns `409` if not running
 
 ### `GET /logs?lines=100`
 
@@ -154,7 +175,7 @@ curl -N -H "X-API-Key: your-key" http://127.0.0.1:8080/logs/stream
 
 ---
 
-## Example usage
+## 💻 Example Usage
 
 ```bash
 KEY="your-api-key-here"
@@ -178,7 +199,7 @@ curl -N -H "X-API-Key: ${KEY}" "${BASE}/logs/stream"
 
 ---
 
-## nginx reverse proxy (HTTPS)
+## 🔒 nginx Reverse Proxy (HTTPS)
 
 Run the API on loopback only and let nginx terminate SSL:
 
@@ -209,22 +230,22 @@ server {
 }
 ```
 
-> **Note**: `proxy_set_header X-Real-IP $remote_addr` is required for the rate limiter to see the real client IP rather than `127.0.0.1`.
+> **Note:** `proxy_set_header X-Real-IP $remote_addr` is required for the rate limiter to see the real client IP rather than `127.0.0.1`.
 
 ---
 
-## Adapting for other game servers
+## ♻️ Adapting for Other Game Servers
 
 Each game server gets its own copy of the `api/` directory. Only two files need changing:
 
-1. **`api/config.py`** — update default paths (`log_dir`, `pidfile`) and the manager script name
-2. **`api/routes/server.py`** — update the log-parsing patterns (`_get_player_info`, `_get_version`, `_get_join_code`, `_get_last_save`) to match the new game's log format
+1. **`api/config.py`** — Update default paths (`log_dir`, `pidfile`) and the manager script name
+2. **`api/routes/server.py`** — Update log-parsing patterns (`_get_player_info`, `_get_version`, `_get_join_code`, `_get_last_save`) to match the new game's log format
 
-The response shapes (`StatusResponse`, `ActionResponse`, etc.) remain identical so the dashboard receives a consistent structure from all servers.
+Response shapes (`StatusResponse`, `ActionResponse`, etc.) remain identical so the dashboard receives a consistent structure from all servers.
 
 ---
 
-## Notes
+## 📝 Notes
 
-- **Single worker only**: `api-manager.sh` and the systemd unit both use `--workers 1`. The in-memory rate limiter (`auth.py`) is not shared across processes. If you ever need multiple workers, replace it with a Redis-backed store.
-- **API docs disabled**: The `/docs` and `/redoc` endpoints are disabled in production (`main.py`). To enable them locally, comment out the `docs_url=None, redoc_url=None` lines.
+- **Single worker only:** `api-manager.sh` and the systemd unit both use `--workers 1`. The in-memory rate limiter (`auth.py`) is not shared across processes. If you need multiple workers, replace it with a Redis-backed store.
+- **API docs disabled:** The `/docs` and `/redoc` endpoints are disabled in production (`main.py`). To enable them locally, comment out the `docs_url=None, redoc_url=None` lines.

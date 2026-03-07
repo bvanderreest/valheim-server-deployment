@@ -1,11 +1,34 @@
-# Valheim Dedicated Server Manager
+# ⚔️ Valheim Dedicated Server Manager
+
+![Platform](https://img.shields.io/badge/platform-Linux-blue?logo=linux&logoColor=white)
+![Shell](https://img.shields.io/badge/shell-Bash-4EAA25?logo=gnu-bash&logoColor=white)
+![SteamCMD](https://img.shields.io/badge/SteamCMD-AppID_896660-1b2838?logo=steam&logoColor=white)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 > A production-ready Bash toolkit for running a Valheim dedicated server on Linux.
 > Deploy, manage, back up, and monitor your server with a single script.
 
 ---
 
-## What's Included
+## 📋 Contents
+
+- [📦 What's Included](#-whats-included)
+- [⚡ Quick Start](#-quick-start)
+- [📋 Prerequisites](#-prerequisites)
+- [🎮 Commands](#-commands)
+- [🔧 Configuration](#-configuration)
+- [💾 Backups & Recovery](#-backups--recovery)
+- [📊 Monitoring](#-monitoring)
+- [🌐 Management API](#-management-api)
+- [📁 Directory Layout](#-directory-layout)
+- [🔗 Crossplay (Steam + Xbox)](#-crossplay-steam--xbox)
+- [🔄 Updates](#-updates)
+- [🔐 Security Recommendations](#-security-recommendations)
+- [🛠️ Troubleshooting](#️-troubleshooting)
+
+---
+
+## 📦 What's Included
 
 | File | Purpose |
 |------|---------|
@@ -20,16 +43,7 @@
 
 ---
 
-## Prerequisites
-
-- Linux server — Ubuntu 22.04 / Debian 12 recommended
-- `sudo` / root access (required for the `deploy` command only)
-- ~1.5 GB free disk space for server files
-- Internet access for SteamCMD downloads
-
----
-
-## Quick Start
+## ⚡ Quick Start
 
 ### Step 1 — Clone and configure
 
@@ -53,7 +67,7 @@ PASSWORD="yourpassword"   # min 5 chars — must not contain the world name
 sudo ./valheim-server-manager.sh deploy
 ```
 
-This single command handles the full first-time setup:
+This single command handles full first-time setup:
 
 - Enables 32-bit support (`dpkg --add-architecture i386`)
 - Adds the multiverse repository and updates package lists
@@ -71,7 +85,16 @@ Your server is now running. Players connect via: `<your-server-ip>:2456`
 
 ---
 
-## Commands
+## 📋 Prerequisites
+
+- Linux server — Ubuntu 22.04 / Debian 12 recommended
+- `sudo` / root access (required for the `deploy` command only)
+- ~1.5 GB free disk space for server files
+- Internet access for SteamCMD downloads
+
+---
+
+## 🎮 Commands
 
 ```bash
 ./valheim-server-manager.sh <command>
@@ -90,7 +113,7 @@ Your server is now running. Players connect via: `<your-server-ip>:2456`
 
 ---
 
-## Configuration
+## 🔧 Configuration
 
 ### `.env` — Your server settings
 
@@ -149,7 +172,7 @@ See [MODIFIERS.md](MODIFIERS.md) for the full modifier reference.
 
 ---
 
-## Backups & Recovery
+## 💾 Backups & Recovery
 
 ### Manual backup
 
@@ -178,7 +201,7 @@ On `start`, the manager checks that the world `.db` and `.fwl` files exist and a
 
 ---
 
-## Monitoring
+## 📊 Monitoring
 
 ```bash
 ./valheim-server-manager.sh stats
@@ -186,7 +209,7 @@ On `start`, the manager checks that the world `.db` and `.fwl` files exist and a
 
 Displays live status, uptime, world size, backup count, and connection details.
 
-The standalone monitor script also supports JSON output for dashboards or external tools:
+The standalone monitor also supports JSON output for dashboards or external tools:
 
 ```bash
 ./valheim-monitor.sh monitor json
@@ -194,9 +217,9 @@ The standalone monitor script also supports JSON output for dashboards or extern
 
 ---
 
-## Management API
+## 🌐 Management API
 
-An optional HTTP API built with FastAPI exposes server status and control commands over a secure REST interface. It is designed to integrate with a centralised web dashboard that manages multiple game servers (Valheim, 7 Days to Die, etc.).
+An optional HTTP API built with FastAPI exposes server status and control commands over a secure REST interface. Designed to integrate with a centralised dashboard managing multiple game servers (Valheim, 7 Days to Die, etc.).
 
 ### Endpoints at a glance
 
@@ -232,7 +255,7 @@ See [api/README.md](api/README.md) for full configuration, nginx HTTPS setup, sy
 
 ---
 
-## Recommended Directory Layout
+## 📁 Directory Layout
 
 ```
 /srv/valheim/
@@ -254,7 +277,7 @@ sudo chmod -R 755 /srv/valheim
 
 ---
 
-## Crossplay (Steam + Xbox)
+## 🔗 Crossplay (Steam + Xbox)
 
 Enable in `.env`:
 
@@ -266,7 +289,7 @@ This adds `-crossplay` to the server launch arguments, routing connections throu
 
 ---
 
-## Updates
+## 🔄 Updates
 
 ```bash
 ./valheim-server-manager.sh update
@@ -276,29 +299,27 @@ Stops the server, downloads the latest Valheim build via SteamCMD, then exits cl
 
 ---
 
-## Security Recommendations
+## 🔐 Security Recommendations
 
 - **Use a dedicated user.** Run day-to-day operations as a non-root `valheim` user. Only `deploy` requires root.
 - **Open the right ports.** Valheim needs UDP **2456** and **2457** open in your firewall.
 - **Keep `.env` private.** It's already in `.gitignore`. Never commit passwords or paths.
 - **Choose a strong password.** Minimum 5 characters. Must not contain or match `WORLD_NAME`.
-- **API is opt-in.** The Management API is disabled by default (`API_ENABLED=false`). Only enable it when you have set a strong `API_KEYS` value and have HTTPS in place via a reverse proxy.
+- **API is opt-in.** The Management API is disabled by default (`API_ENABLED=false`). Only enable it when you have a strong `API_KEYS` value and HTTPS via a reverse proxy.
 
 ---
 
-## Troubleshooting
+## 🛠️ Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| `Missing configuration` from SteamCMD | SteamCMD hasn't initialized itself yet | Re-run `deploy` — it now runs SteamCMD's self-update first |
+| `Missing configuration` from SteamCMD | SteamCMD hasn't initialized itself yet | Re-run `deploy` — it runs SteamCMD's self-update first |
 | `World files not found` on backup | `SAVEDIR` points to wrong path | Confirm files are in `$SAVEDIR/worlds_local/` |
 | Server not visible in browser | `PUBLIC=0` or firewall blocking UDP 2456–2457 | Set `PUBLIC=1` and check firewall rules |
 | Players can't connect across platforms | Crossplay not enabled | Set `CROSSPLAY=true` in `.env` and restart |
 
 ---
 
-## License
+## 📜 License
 
 MIT — Copyright (c) 2024 Valheim Server Manager
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
