@@ -107,7 +107,7 @@ Your server is now running. Players connect via: `<your-server-ip>:2456`
 | `restart` | Stop then start |
 | `stats` | Show live status, uptime, storage usage, and connection details |
 | `logs` | Tail the live server log |
-| `backup` | Create a timestamped world backup without stopping the server |
+| `backup` | Create a timestamped world backup — safe whether the server is running or stopped |
 | `update` | Stop the server, pull the latest build via SteamCMD, then exit |
 | `deploy` | Full first-time install: SteamCMD, dependencies, and server files |
 
@@ -156,15 +156,25 @@ Controls combat difficulty, resource rates, raids, portals, and more.
 Created automatically from `modifiers.example.conf` on first run and never overwritten by updates.
 
 ```bash
-DEFAULT_MODIFIER_GROUP="standard"   # preset | basic | standard | hardcore | custom
-PRESET="normal"                     # casual | easy | normal | hard | hardcore | immersive | hammer
+PRESET="normal"          # casual | easy | normal | hard | hardcore | immersive | hammer
 
-BASIC_MODIFIERS=(
+ENABLE_MODIFIERS=true
+MODIFIERS=(
     "Combat=easy"
     "DeathPenalty=easy"
     "Resources=more"
     "Raids=less"
     "Portals=casual"
+)
+
+SETKEYS=(
+    # "nomap"
+    # "EnemyDamage=100"  # numeric tuning — vanilla default is 100
+)
+
+ENABLE_EXTRA_MODIFIERS=false
+EXTRA_MODIFIERS=(
+    # "ModCategory=value"  # for modded servers only
 )
 ```
 
@@ -180,7 +190,7 @@ See [MODIFIERS.md](MODIFIERS.md) for the full modifier reference.
 ./valheim-server-manager.sh backup
 ```
 
-Creates `world-<WORLD_NAME>-<timestamp>.tar.gz` in `BACKUP_DIR`. The server keeps running — Valheim flushes saves on `SAVE_INTERVAL` so live backups are safe.
+Creates `world-<WORLD_NAME>-<timestamp>.tar.gz` in `BACKUP_DIR`. Backups are safe whether the server is running or stopped — when running, Valheim flushes to disk on `SAVE_INTERVAL` before the backup captures the files.
 
 ### Automatic in-game backups
 

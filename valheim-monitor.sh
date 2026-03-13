@@ -17,13 +17,14 @@ monitor() {
   local output_format="${1:-text}"  # text or json
   
   if [[ "${output_format}" == "json" ]]; then
+    local public_bool; public_bool="$([[ "${PUBLIC}" == "1" ]] && echo "true" || echo "false")"
     echo "{"
     echo "  \"status\": \"$(is_running && echo "running" || echo "stopped")\","
-    echo "  \"players\": \"$(count_connected_players)\","
+    echo "  \"players\": $(count_connected_players),"
     echo "  \"server_name\": \"${SERVER_NAME}\","
     echo "  \"world\": \"${WORLD_NAME}\","
-    echo "  \"port\": \"${PORT}\","
-    echo "  \"public\": \"${PUBLIC}\""
+    echo "  \"port\": ${PORT},"
+    echo "  \"public\": ${public_bool}"
     echo "}"
   else
     echo "Server Status:"

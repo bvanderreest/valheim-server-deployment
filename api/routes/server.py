@@ -142,11 +142,22 @@ def _get_server_ip() -> str:
 
 def _run_manager_command(command: str) -> None:
     """Run a valheim-server-manager.sh command in a background thread."""
-    subprocess.run(
-        [str(settings.manager_script), command],
-        cwd=str(settings.script_dir),
-        timeout=300,
-    )
+    import logging
+    logger = logging.getLogger(__name__)
+    try:
+        result = subprocess.run(
+            [str(settings.manager_script), command],
+            cwd=str(settings.script_dir),
+            timeout=300,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            logger.error("manager command %r exited %d: %s", command, result.returncode, result.stderr.strip())
+    except subprocess.TimeoutExpired:
+        logger.error("manager command %r timed out after 300s", command)
+    except Exception as exc:
+        logger.error("manager command %r raised: %s", command, exc)
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -218,10 +229,5 @@ async def restart_server(background_tasks: BackgroundTasks) -> ActionResponse:
 
 @router.post("/server/backup", status_code=202, response_model=ActionResponse)
 async def backup_server(background_tasks: BackgroundTasks) -> ActionResponse:
-    if not _is_running():
-        raise HTTPException(
-            status_code=409,
-            detail="Server is not running. Backups require an active server.",
-        )
     background_tasks.add_task(_run_manager_command, "backup")
     return ActionResponse(accepted=True, message="Backup command accepted.")

@@ -159,7 +159,7 @@ Action endpoints return `202 Accepted` immediately. The underlying manager scrip
 
 - `start` returns `409` if already running
 - `stop` returns `409` if not running
-- `backup` returns `409` if not running
+- `backup` is accepted regardless of whether the server is running or stopped
 
 ### `GET /logs?lines=100`
 

@@ -16,47 +16,6 @@ rotate_log() {
   fi
 }
 
-# Function to set modifier group variables based on DEFAULT_MODIFIER_GROUP
-set_modifier_group() {
-  # Default to standard if not set
-  local modifier_group="${DEFAULT_MODIFIER_GROUP:-standard}"
-  
-  # Reset all modifier group flags
-  ENABLE_BASIC_MODIFIERS=false
-  ENABLE_ADVANCED_MODIFIERS=false
-  ENABLE_EXPERT_MODIFIERS=false
-  ENABLE_CUSTOM_MODIFIERS=false
-  
-  # Set modifier group based on selection
-  case "${modifier_group,,}" in
-    "basic")
-      ENABLE_BASIC_MODIFIERS=true
-      ;;
-    "preset")
-      # For preset only, we disable all modifier tiers except preset
-      # This means we don't enable any modifiers, just use the preset
-      # The preset is handled separately via -preset flag in build_args
-      ;;
-    "standard")
-      ENABLE_BASIC_MODIFIERS=true
-      ENABLE_ADVANCED_MODIFIERS=true
-      ;;
-    "hardcore")
-      ENABLE_BASIC_MODIFIERS=true
-      ENABLE_ADVANCED_MODIFIERS=true
-      ENABLE_EXPERT_MODIFIERS=true
-      ;;
-    "custom")
-      ENABLE_CUSTOM_MODIFIERS=true
-      ;;
-    *)
-      # Default to standard if invalid value
-      ENABLE_BASIC_MODIFIERS=true
-      ENABLE_ADVANCED_MODIFIERS=true
-      echo "Warning: Invalid DEFAULT_MODIFIER_GROUP '${modifier_group}', defaulting to 'standard'" >&2
-      ;;
-  esac
-}
 
 build_args() {
   # Check if modifiers.conf exists, if not, create it from the example
@@ -71,9 +30,6 @@ build_args() {
     fi
   fi
   
-  # Set ENABLE_* defaults from DEFAULT_MODIFIER_GROUP (already loaded by config.conf),
-  # then source modifiers.conf so any explicit ENABLE_* lines in that file take precedence.
-  set_modifier_group
   source "${script_dir}/modifiers.conf"
   
   local args=()
@@ -84,41 +40,30 @@ build_args() {
   [[ "${CROSSPLAY}" == "true" ]] && args+=( -crossplay )
   [[ -n "${PRESET}" ]] && args+=( -preset "${PRESET}" )
   
-  # Process basic modifiers
-  if [[ "${ENABLE_BASIC_MODIFIERS}" == "true" ]]; then
-    for m in "${BASIC_MODIFIERS[@]}"; do
+  # Process modifiers
+  if [[ "${ENABLE_MODIFIERS}" == "true" ]]; then
+    for m in "${MODIFIERS[@]}"; do
       local cat="${m%%=*}" val="${m#*=}"
       [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
     done
   fi
-  
-  # Process advanced modifiers
-  if [[ "${ENABLE_ADVANCED_MODIFIERS}" == "true" ]]; then
-    for m in "${ADVANCED_MODIFIERS[@]}"; do
+
+  # Process extra modifiers (modded servers / power users)
+  if [[ "${ENABLE_EXTRA_MODIFIERS}" == "true" ]]; then
+    for m in "${EXTRA_MODIFIERS[@]}"; do
       local cat="${m%%=*}" val="${m#*=}"
       [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
     done
   fi
-  
-  # Process expert modifiers
-  if [[ "${ENABLE_EXPERT_MODIFIERS}" == "true" ]]; then
-    for m in "${EXPERT_MODIFIERS[@]}"; do
-      local cat="${m%%=*}" val="${m#*=}"
-      [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
-    done
-  fi
-  
-  # Process custom modifiers
-  if [[ "${ENABLE_CUSTOM_MODIFIERS}" == "true" ]]; then
-    for m in "${CUSTOM_MODIFIERS[@]}"; do
-      local cat="${m%%=*}" val="${m#*=}"
-      [[ -n "${cat}" && -n "${val}" ]] && args+=( -modifier "${cat,,}" "${val,,}" )
-    done
-  fi
-  
-  # Process setkeys
+
+  # Process setkeys — supports both toggle keys ("nomap") and numeric keys ("EnemyDamage=200")
   for key in "${SETKEYS[@]}"; do
-    [[ -n "${key}" ]] && args+=( -setkey "${key}" )
+    if [[ "${key}" == *"="* ]]; then
+      local k="${key%%=*}" v="${key#*=}"
+      [[ -n "${k}" && -n "${v}" ]] && args+=( -setkey "${k}" "${v}" )
+    else
+      [[ -n "${key}" ]] && args+=( -setkey "${key}" )
+    fi
   done
 
   # Process custom arguments
@@ -133,18 +78,22 @@ build_args() {
 
 is_running() { [[ -f "${PIDFILE}" ]] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; }
 
-latest_backup() { ls -1t "${BACKUP_DIR}"/world-"${WORLD_NAME}"-*.tar.gz 2>/dev/null | head -n 1; }
+latest_backup() { find "${BACKUP_DIR}" -maxdepth 1 -name "world-${WORLD_NAME}-*.tar.gz" 2>/dev/null | sort -r | head -n 1; }
 
 guard_world() {
   # If current world files are missing or zero-sized (common after power cut), restore the newest backup.
-  local db="${SAVEDIR}/${WORLD_NAME}.db"
-  local fwl="${SAVEDIR}/${WORLD_NAME}.fwl"
+  local world_dir="${SAVEDIR}/worlds_local"
+  local db="${world_dir}/${WORLD_NAME}.db"
+  local fwl="${world_dir}/${WORLD_NAME}.fwl"
   if [[ ! -f "${db}" || ! -s "${db}" || ! -f "${fwl}" || ! -s "${fwl}" ]]; then
     local last; last="$(latest_backup || true)"
     if [[ -n "${last}" ]]; then
       echo "[guard] Damaged/missing world. Restoring from ${last}"
-      # Extract both files from backup to ensure both are restored
-      tar -xzf "${last}" -C "${SAVEDIR}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"
+      mkdir -p "${world_dir}"
+      if ! tar -xzf "${last}" -C "${world_dir}" "${WORLD_NAME}.db" "${WORLD_NAME}.fwl"; then
+        echo "[guard] ERROR: Restore failed — backup may be corrupt. Manual intervention required." >&2
+        exit 1
+      fi
       echo "[guard] Restore complete."
     else
       echo "[guard] No backups found; starting with current files (if any)."

@@ -8,201 +8,123 @@ Modifiers let you tune the gameplay experience without touching the server binar
 
 When the server starts, `build_args()` in `helpers.sh` assembles the launch arguments in this order:
 
-1. **Group selection** — `DEFAULT_MODIFIER_GROUP` sets which modifier tiers are active
-2. **Override resolution** — any explicit `ENABLE_*` flags in your `modifiers.conf` take precedence over the group
-3. **Preset** — emitted as `-preset <value>` (sets a named difficulty baseline)
-4. **Modifiers** — each enabled array entry becomes `-modifier <category> <value>`
-5. **Setkeys** — each entry becomes `-setkey <key>` (boolean world flags)
+1. **Preset** — emitted as `-preset <value>` (sets a named difficulty baseline)
+2. **Modifiers** — each enabled array entry becomes `-modifier <category> <value>`, overriding only the listed categories
+3. **Extra modifiers** — same as above, applied only when `ENABLE_EXTRA_MODIFIERS=true`
+4. **Setkeys** — toggle and numeric world flags emitted as `-setkey <key>` or `-setkey <key> <value>`
 
 ---
 
 ## Quick Setup
 
-`modifiers.conf` is created automatically from `modifiers.example.conf` on first run. It is never overwritten by updates, so your changes are safe.
+`modifiers.conf` is created automatically from `modifiers.example.conf` on first run and is never overwritten by updates.
 
-For most servers, you only need to set two things:
-
-```bash
-DEFAULT_MODIFIER_GROUP="standard"
-PRESET="normal"
-```
-
-Then adjust `BASIC_MODIFIERS` to taste.
-
----
-
-## Modifier Groups (`DEFAULT_MODIFIER_GROUP`)
-
-This single setting controls which tiers of modifiers are sent to the server.
-
-| Value | What gets applied |
-|-------|-------------------|
-| `preset` | Preset only — no `-modifier` flags at all |
-| `basic` | `BASIC_MODIFIERS` only |
-| `standard` | `BASIC_MODIFIERS` (same as `basic` — the default) |
-| `hardcore` | `BASIC_MODIFIERS` + `ADVANCED_MODIFIERS` + `EXPERT_MODIFIERS` |
-| `custom` | `CUSTOM_MODIFIERS` only — you define the full list yourself |
-
-You can also override individual tiers without changing the group:
-
-```bash
-DEFAULT_MODIFIER_GROUP="standard"
-ENABLE_EXPERT_MODIFIERS=true   # add expert modifiers on top of the standard set
-```
+For most servers, `cp modifiers.example.conf modifiers.conf` is all that is needed. The defaults give a playable, slightly relaxed community server on top of the `normal` preset. Adjust `MODIFIERS` entries to taste.
 
 ---
 
 ## Preset Difficulty (`PRESET`)
 
-Sets a named difficulty baseline before any `-modifier` flags are applied. Think of it as the starting point that your modifiers then adjust.
+Sets a named difficulty baseline. Individual `-modifier` flags applied after the preset override only the specific categories listed.
 
-| Value | Experience |
-|-------|-----------|
-| `casual` | Very easy — minimal challenge, forgiving death |
-| `easy` | Reduced difficulty across the board |
-| `normal` | Default Valheim — balanced challenge |
-| `hard` | Increased enemy difficulty and fewer resources |
-| `hardcore` | Permadeath-style penalties |
-| `immersive` | No shared map, increased realism |
-| `hammer` | Creative mode — no resource costs for building |
+| Value | Combat | Death Penalty | Resources | Raids | Portals | Notes |
+|-------|--------|---------------|-----------|-------|---------|-------|
+| `casual` | veryeasy | casual | muchmore | none | casual | Minimal challenge |
+| `easy` | easy | easy | more | less | — | Slightly relaxed |
+| `normal` | — | — | — | — | — | Default Valheim |
+| `hard` | hard | hard | less | more | hard | Tougher all-round |
+| `hardcore` | veryhard | hardcore | less | more | veryhard | Permadeath |
+| `immersive` | hard | hard | less | more | veryhard | No map, no portals |
+| `hammer` | — | casual | muchmore | none | casual | Free build, creative |
 
-Set `PRESET=""` to skip the preset entirely and rely solely on modifiers.
-
----
-
-## Basic Modifiers (`BASIC_MODIFIERS`)
-
-The five official vanilla modifier categories. Each entry is passed to the server as `-modifier <Category> <value>`.
-
-> These are the only modifier categories supported by the vanilla dedicated server.
-> If you are running a modded server (ValheimPlus, Jotunn mods), see Advanced & Expert below.
-
-### Categories and valid values
-
-| Category | Values | Effect |
-|----------|--------|--------|
-| `Combat` | `veryeasy` `easy` _(default)_ `hard` `veryhard` | Enemy damage and aggression |
-| `DeathPenalty` | `casual` `veryeasy` `easy` _(default)_ `hard` `hardcore` | What you lose on death |
-| `Resources` | `muchless` `less` _(default)_ `more` `muchmore` `most` | Crafting/building material yield |
-| `Raids` | `none` `muchless` `less` _(default)_ `more` `muchmore` | Frequency of enemy raids on your base |
-| `Portals` | `casual` _(default)_ `hard` `veryhard` | Portal restrictions (item carry rules) |
-
-### Example — relaxed community server
-
-```bash
-BASIC_MODIFIERS=(
-    "Combat=easy"
-    "DeathPenalty=easy"
-    "Resources=more"
-    "Raids=less"
-    "Portals=casual"
-)
-```
-
-### Example — challenging survival server
-
-```bash
-BASIC_MODIFIERS=(
-    "Combat=hard"
-    "DeathPenalty=hard"
-    "Resources=less"
-    "Raids=more"
-    "Portals=hard"
-)
-```
+Set `PRESET=""` to skip the preset entirely and define all modifier values yourself.
 
 ---
 
-## Advanced & Expert Modifiers
+## Modifiers (`MODIFIERS`)
 
-`ADVANCED_MODIFIERS` and `EXPERT_MODIFIERS` use the same `"Category=value"` format as basic modifiers but are intended for **modded servers** that register additional `-modifier` categories (e.g. ValheimPlus, Jotunn-based mods).
+The 5 official vanilla `-modifier` categories. Active when `ENABLE_MODIFIERS=true`.
 
-**Leave these arrays empty on a vanilla server** — unrecognised categories are ignored by the base game but may produce log warnings.
+| Category | Valid Values |
+|----------|-------------|
+| `Combat` | `veryeasy` `easy` `hard` `veryhard` |
+| `DeathPenalty` | `casual` `veryeasy` `easy` `hard` `hardcore` |
+| `Resources` | `muchless` `less` `more` `muchmore` `most` |
+| `Raids` | `none` `muchless` `less` `more` `muchmore` |
+| `Portals` | `casual` `hard` `veryhard` |
 
-```bash
-ADVANCED_MODIFIERS=()
-EXPERT_MODIFIERS=()
-```
-
-These tiers are only active when `DEFAULT_MODIFIER_GROUP="hardcore"` or when you explicitly set `ENABLE_ADVANCED_MODIFIERS=true` in your config.
-
----
-
-## Custom Modifiers (`CUSTOM_MODIFIERS`)
-
-Active when `DEFAULT_MODIFIER_GROUP="custom"`. Replaces all other tiers — you define the complete modifier list from scratch. Useful when you want precise control with no inherited defaults.
-
-```bash
-DEFAULT_MODIFIER_GROUP="custom"
-
-CUSTOM_MODIFIERS=(
-    "Combat=hard"
-    "DeathPenalty=casual"
-    "Resources=less"
-    "Raids=none"
-    "Portals=veryhard"
-)
-```
+`Portals=casual` allows all items including ores through portals. `Portals=hard` disables boss portals. `Portals=veryhard` disables all portals.
 
 ---
 
 ## Setkeys (`SETKEYS`)
 
-Boolean world flags passed as `-setkey <key>`. These are **drastic, world-altering changes** and are all commented out by default. Only enable what you intentionally want — some cannot be undone without editing the world save.
+World state flags and numeric tuning knobs. Written into the world save — some changes cannot be reversed without editing the world file directly.
+
+### Toggle Keys
+
+Uncomment the entry to enable — presence of the key activates the feature.
 
 | Key | Effect |
 |-----|--------|
-| `nomap` | Removes the shared map — every player navigates without a minimap |
-| `nobuildcost` | Building and crafting costs no materials |
-| `nopassivemobs` | Disables passive creatures (deer, birds, fish) |
-| `noevent` | Disables random world events and raids |
-| `noenemy` | Disables all enemy spawning |
-| `noitem` | Enemies drop no items |
-| `noportal` | Disables all portal use — no fast travel |
-| `noenemydrops` | Enemies drop no loot (separate from `noitem`) |
+| `nomap` | Removes the shared map for all players |
+| `nobuildcost` | Building structures costs no materials |
+| `nocraftcost` | Crafting items costs no materials |
+| `noworkbench` | Craft and build anywhere without a workbench |
+| `allpiecesunlocked` | All build pieces available from the start |
+| `allrecipesunlocked` | All crafting recipes available from the start |
+| `dungeonbuild` | Allow building inside dungeons (crypts, tombs, etc.) |
+| `noportals` | Disable all portals entirely |
+| `nobossportals` | Portals disabled while a boss event is active |
+| `teleportall` | Block new portal construction; existing portals remain usable |
+| `passivemobs` | All creatures passive unless provoked |
+| `playerevents` | Raids triggered by player proximity, not on a global timer |
+| `deathkeepequip` | Keep equipped items on death |
+| `deathdeleteunequipped` | Delete only unequipped items on death |
+| `deathdeleteItems` | Delete all items on death |
+| `deathskillsreset` | Reset all skills to 0 on death |
+| `fire` | Fire spreads and burns structures world-wide |
+| `worldlevellockedtools` | Tool tier access gated by world progression level |
 
-### Example — hardcore immersion run
+### Numeric Keys
 
-```bash
-SETKEYS=(
-    "nomap"
-    "noportal"
-)
-```
+Format: `"Key=value"` — becomes `-setkey Key value`. Vanilla default is always `100`.
 
-### Example — peaceful building server
-
-```bash
-SETKEYS=(
-    "noevent"
-    "noenemy"
-    "nobuildcost"
-)
-```
+| Key | Default | Effect |
+|-----|---------|--------|
+| `EnemyDamage` | 100 | Damage enemies deal to players (`200` = double, `50` = half) |
+| `PlayerDamage` | 100 | Inversely scales creature HP (`200` = half HP / hits harder, `50` = double HP) |
+| `EventRate` | 100 | Raid frequency (`0` = off, `200` = double rate) |
+| `EnemyLevelUpRate` | 100 | Chance of starred enemies spawning |
+| `EnemySpeedSize` | 100 | Enemy movement speed and physical size |
+| `SkillGainRate` | 100 | Skill XP gain speed (`200` = double, `0` = frozen) |
+| `SkillReductionRate` | 100 | Skill loss on death (`0` = no loss, `200` = double loss) |
+| `StaminaRate` | 100 | Stamina consumption rate (`0` = unlimited) |
+| `StaminaRegenRate` | 100 | Stamina regeneration speed |
+| `MoveStaminaRate` | 100 | Stamina drain from movement specifically |
+| `AdrenalineRate` | 100 | Adrenaline buildup rate |
+| `WorldLevel` | 100 | World difficulty scaling level |
 
 ---
 
-## Tier Control Flags
+## Extra Modifiers (`EXTRA_MODIFIERS`)
 
-These are set automatically by `DEFAULT_MODIFIER_GROUP` but can be overridden directly in `modifiers.conf`. Explicit values always win.
+Active when `ENABLE_EXTRA_MODIFIERS=true`. Applied in addition to `MODIFIERS`.
 
-```bash
-ENABLE_BASIC_MODIFIERS=true
-ENABLE_ADVANCED_MODIFIERS=false
-ENABLE_EXPERT_MODIFIERS=false
-ENABLE_CUSTOM_MODIFIERS=false
-```
+Intended for modded servers (ValheimPlus, Jotunn-based mods) that register additional `-modifier` categories beyond the vanilla 5, or for power users who want a secondary override layer kept separate from the main list.
+
+Unrecognised categories are silently ignored by the base game but may produce warnings in the server log. Not needed for vanilla servers.
 
 ---
 
 ## Common Configurations
 
-### Casual / family-friendly
+### Casual / community server
 
 ```bash
-DEFAULT_MODIFIER_GROUP="standard"
 PRESET="easy"
-BASIC_MODIFIERS=(
+ENABLE_MODIFIERS=true
+MODIFIERS=(
     "Combat=veryeasy"
     "DeathPenalty=casual"
     "Resources=more"
@@ -211,19 +133,19 @@ BASIC_MODIFIERS=(
 )
 ```
 
-### Vanilla experience (no modifiers)
+### Vanilla experience
 
 ```bash
-DEFAULT_MODIFIER_GROUP="preset"
 PRESET="normal"
+ENABLE_MODIFIERS=false
 ```
 
 ### Hardcore survival
 
 ```bash
-DEFAULT_MODIFIER_GROUP="standard"
 PRESET="hard"
-BASIC_MODIFIERS=(
+ENABLE_MODIFIERS=true
+MODIFIERS=(
     "Combat=veryhard"
     "DeathPenalty=hardcore"
     "Resources=muchless"
@@ -232,6 +154,36 @@ BASIC_MODIFIERS=(
 )
 SETKEYS=(
     "nomap"
+    "SkillReductionRate=200"
+)
+```
+
+### Immersive roleplay
+
+```bash
+PRESET="immersive"
+ENABLE_MODIFIERS=true
+MODIFIERS=(
+    "Combat=hard"
+    "Resources=less"
+)
+SETKEYS=(
+    "passivemobs"
+    "playerevents"
+    "dungeonbuild"
+)
+```
+
+### Free build / creative
+
+```bash
+PRESET="hammer"
+ENABLE_MODIFIERS=false
+SETKEYS=(
+    "nobuildcost"
+    "nocraftcost"
+    "allpiecesunlocked"
+    "allrecipesunlocked"
 )
 ```
 
