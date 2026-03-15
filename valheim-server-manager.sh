@@ -407,7 +407,7 @@ deploy() {
   chown -R "${owner}" "${server_dir}"
   
   # Install Valheim server using SteamCMD with better error handling
-  if ! "${steamcmd_bin}" +login anonymous +force_install_dir "${server_dir}" +app_update 896660 validate +quit; then
+  if ! "${steamcmd_bin}" +force_install_dir "${server_dir}" +login anonymous +app_update 896660 validate +quit; then
     echo "[deploy] Error: Failed to install Valheim server via SteamCMD"
     exit 1
   fi
