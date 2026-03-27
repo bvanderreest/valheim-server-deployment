@@ -1,0 +1,34 @@
+name: Feature / Enhancement
+about: New functionality or improvement
+labels:
+  - feature
+  - source/dev
+  - triage/new
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What and why?
+      placeholder: Describe the feature and why it matters
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] User can ...
+        - [ ] API returns ...
+        - [ ] Works on mobile and web
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P1 — High
+        - P2 — Medium
+        - P3 — Low
+    validations:
+      required: true

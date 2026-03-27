@@ -20,14 +20,11 @@ start() {
 
   if is_running; then echo "Already running (PID $(cat "${PIDFILE}"))."; exit 0; fi
 
-  # Verify server directory and binary exist before attempting to cd
+  preflight_check
+
+  # Verify server directory exists before attempting to cd
   if [[ ! -d "${SERVER_DIR}" ]]; then
     echo "Error: Server directory does not exist: ${SERVER_DIR}"
-    exit 1
-  fi
-
-  if [[ ! -x "${BINARY}" ]]; then
-    echo "Error: Server binary not found or not executable: ${BINARY}"
     exit 1
   fi
 

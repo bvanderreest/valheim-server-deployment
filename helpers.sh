@@ -76,6 +76,39 @@ build_args() {
   printf '%s\n' "${args[@]}"
 }
 
+preflight_check() {
+  local failed=0
+  echo "[preflight] Checking shared library dependencies..."
+
+  if [[ ! -x "${BINARY}" ]]; then
+    echo "[preflight] ERROR: Binary not found or not executable: ${BINARY}" >&2
+    return 1
+  fi
+
+  # Check server binary
+  if ldd "${BINARY}" 2>&1 | grep -q "not found"; then
+    echo "[preflight] WARNING: Missing libraries for ${BINARY}:" >&2
+    ldd "${BINARY}" 2>&1 | grep "not found" >&2
+    failed=1
+  fi
+
+  # Check plugin .so files (linux64/ Steam runtime plugins)
+  while IFS= read -r -d '' sofile; do
+    if ldd "${sofile}" 2>&1 | grep -q "not found"; then
+      echo "[preflight] WARNING: Missing libraries for ${sofile}:" >&2
+      ldd "${sofile}" 2>&1 | grep "not found" >&2
+      failed=1
+    fi
+  done < <(find "${SERVER_DIR}/linux64" -maxdepth 1 -name "*.so" -print0 2>/dev/null)
+
+  if [[ $failed -eq 0 ]]; then
+    echo "[preflight] All library checks passed."
+  else
+    echo "[preflight] Some libraries are missing. Server may fail to start." >&2
+    return 1
+  fi
+}
+
 is_running() { [[ -f "${PIDFILE}" ]] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; }
 
 latest_backup() { find "${BACKUP_DIR}" -maxdepth 1 -name "world-${WORLD_NAME}-*.tar.gz" 2>/dev/null | sort -r | head -n 1; }

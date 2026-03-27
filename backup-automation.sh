@@ -25,6 +25,9 @@ backup_if_running() {
         else
             log "PID file exists but process is not running. Removing stale PID file."
             rm -f "${PIDFILE}"
+            log "Server is stopped. Creating backup anyway..."
+            "${SCRIPT_DIR}/valheim-server-manager.sh" backup
+            log "Backup completed."
         fi
     else
         log "Server is not running. Creating backup anyway..."
@@ -40,15 +43,9 @@ main() {
     # Ensure backup directory exists
     mkdir -p "${BACKUP_DIR}"
     
-    # Run backup
+    # Run backup (pruning is handled inside valheim-server-manager.sh backup)
     backup_if_running
-    
-    # Clean up old backups (keep only the most recent ones)
-    log "Cleaning up old backups..."
-    cd "${BACKUP_DIR}"
-    ls -1t world-"${WORLD_NAME}"-*.tar.gz | tail -n +${BACKUPS_KEEP} | xargs -r rm -f
-    log "Backup cleanup completed."
-    
+
     log "Automated backup process completed."
 }
 

@@ -34,3 +34,12 @@ server/
 .api.pid
 .api.log
 .venv/
+.env.local
+.env.*.local
+.swarm/
+
+# Claude Code tooling — excluded from public GitHub mirror
+CLAUDE.md
+.claude/
+.mcp.json
+.claude-flow/
