@@ -93,6 +93,9 @@ start() {
   fi
   local total=${#ms_patterns[@]}
   local bar_width=20
+  local bar_full=""
+  for (( _i=0; _i<bar_width; _i++ )); do bar_full+="█"; done
+  printf "  %-14s  [%s] 100%%\n" "Pre-flight" "${bar_full}"
   local step=0
   local spin_idx=0
   local spinners=('|' '/' '-' '\')
@@ -357,7 +360,8 @@ deploy() {
     dpkg --add-architecture i386
     add-apt-repository -y multiverse
     apt-get update
-    apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip
+    apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip \
+      libpulse0 libpulse-mainloop-glib0 pulseaudio-utils
   elif command -v yum &> /dev/null; then
     # CentOS/RHEL/Fedora
     yum install -y glibc.i686 libstdc++.i686 zlib.i686 steamcmd curl wget unzip
