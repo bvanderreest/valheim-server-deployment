@@ -1,0 +1,39 @@
+name: SIT Defect
+about: Issue found during system integration testing
+labels:
+  - bug
+  - sit/found
+  - source/dev
+  - triage/new
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What failed?
+      placeholder: Describe the defect found during testing
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: input
+    id: branch
+    attributes:
+      label: Branch tested
+      placeholder: feature/sprint-008-social-layer
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Severity
+      options:
+        - P0 — Critical (blocks release)
+        - P1 — High (must fix before merge)
+        - P2 — Medium (fix if time allows)
+        - P3 — Low (defer to next sprint)
+    validations:
+      required: true
