@@ -101,6 +101,44 @@ guard_world() {
   fi
 }
 
+preflight_check() {
+  # Run ldd against the server binary and every .so in the Plugins directory.
+  # Prints "TARGET: missing_lib" for each unresolved dependency.
+  # Returns 1 if anything is missing, 0 if all libraries resolved.
+  local server_dir="$1"
+  local binary="$2"
+  local plugins_dir="${server_dir}/valheim_server_Data/Plugins"
+
+  local -a targets=()
+  [[ -f "${binary}" ]] && targets+=("${binary}")
+  while IFS= read -r so; do
+    targets+=("${so}")
+  done < <(find "${plugins_dir}" -maxdepth 1 -name "*.so" 2>/dev/null | sort)
+
+  if [[ ${#targets[@]} -eq 0 ]]; then
+    echo "ERROR: No binaries or plugins found to check under ${server_dir}"
+    return 1
+  fi
+
+  local -a results=()
+  for target in "${targets[@]}"; do
+    local label; label="$(basename "${target}")"
+    while IFS= read -r line; do
+      if [[ "${line}" == *"not found"* ]]; then
+        local lib; lib="${line%%=>*}"
+        lib="${lib//[[:space:]]/}"
+        results+=("${label}: ${lib}")
+      fi
+    done < <(ldd "${target}" 2>/dev/null)
+  done
+
+  if [[ ${#results[@]} -gt 0 ]]; then
+    printf '%s\n' "${results[@]}"
+    return 1
+  fi
+  return 0
+}
+
 get_uptime() {
   # Calculate uptime from PID start time
   if ! is_running; then echo "0"; return; fi

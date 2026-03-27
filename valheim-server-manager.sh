@@ -31,6 +31,35 @@ start() {
     exit 1
   fi
 
+  # Pre-flight: verify all shared-library dependencies before touching the server.
+  # Checks the server binary and every plugin .so so that any OS-level library
+  # change is caught here rather than producing a cryptic runtime failure.
+  local -a _preflight_issues=()
+  while IFS= read -r _issue; do
+    [[ -n "${_issue}" ]] && _preflight_issues+=("${_issue}")
+  done < <(preflight_check "${SERVER_DIR}" "${BINARY}")
+
+  if [[ ${#_preflight_issues[@]} -gt 0 ]]; then
+    echo "╔═══════════════════════════════════════════════════════════╗"
+    echo "║                  Valheim Server Starting                  ║"
+    echo "╚═══════════════════════════════════════════════════════════╝"
+    printf "  %-12s %s\n" "Server:"    "${SERVER_NAME}"
+    printf "  %-12s %s\n" "World:"     "${WORLD_NAME}"
+    printf "  %-12s %s\n" "Port:"      "${PORT}"
+    echo "───────────────────────────────────────────────────────────"
+    printf "  %-14s  [%-20s] FAILED\n" "Pre-flight" ""
+    echo ""
+    echo "  Missing shared libraries:"
+    for _issue in "${_preflight_issues[@]}"; do
+      printf "    - %s\n" "${_issue}"
+    done
+    echo ""
+    echo "  Tip: use 'apt-file search <libname>' to find the right package."
+    echo "───────────────────────────────────────────────────────────"
+    echo "═══════════════════════════════════════════════════════════"
+    exit 1
+  fi
+
   # Enter server directory so ./linux64 resolves for Steam init
   cd "${SERVER_DIR}"
 
@@ -96,6 +125,9 @@ start() {
   fi
   local total=${#ms_patterns[@]}
   local bar_width=20
+  local bar_full=""
+  for (( _i=0; _i<bar_width; _i++ )); do bar_full+="█"; done
+  printf "  %-14s  [%s] 100%%\n" "Pre-flight" "${bar_full}"
   local step=0
   local spin_idx=0
   local spinners=('|' '/' '-' '\')
@@ -360,7 +392,8 @@ deploy() {
     dpkg --add-architecture i386
     add-apt-repository -y multiverse
     apt-get update
-    apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip
+    apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip \
+      libpulse0 libpulse-mainloop-glib0 pulseaudio-utils
   elif command -v yum &> /dev/null; then
     # CentOS/RHEL/Fedora
     yum install -y glibc.i686 libstdc++.i686 zlib.i686 steamcmd curl wget unzip
