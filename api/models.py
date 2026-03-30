@@ -11,7 +11,16 @@ class HealthResponse(BaseModel):
 
 class PlayerInfo(BaseModel):
     count: int
+    max: int
     names: list[str]
+
+
+class ConnectionInfo(BaseModel):
+    ip: str
+    port: int
+    join_code: Optional[str]
+    crossplay: bool
+    public: bool
 
 
 class StatusResponse(BaseModel):
@@ -30,11 +39,7 @@ class StatusResponse(BaseModel):
     # Game info (only populated when running)
     version: Optional[str]
     players: PlayerInfo
-    join_code: Optional[str]
-    server_ip: str
-    port: int
-    crossplay: bool
-    public: bool
+    connection: ConnectionInfo
     last_save: Optional[str]
 
 

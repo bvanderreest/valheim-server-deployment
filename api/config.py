@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     port: int = 2456
     crossplay: str = "true"
     public: str = "0"
+    max_players: int = 10
 
     # Paths — read LOG_DIR and PIDFILE from existing .env; logfile is derived
     log_dir: Path = Path("/srv/valheim/logs")

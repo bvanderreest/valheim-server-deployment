@@ -4,13 +4,14 @@ import socket
 import subprocess
 import time
 from collections import deque
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from ..config import settings
-from ..models import ActionResponse, PlayerInfo, StatusResponse
+from ..models import ActionResponse, ConnectionInfo, PlayerInfo, StatusResponse
 
 router = APIRouter()
 
@@ -89,7 +90,7 @@ def _get_player_info() -> PlayerInfo:
         if m:
             names.append(m.group(1).strip())
 
-    return PlayerInfo(count=count, names=sorted(set(names)))
+    return PlayerInfo(count=count, max=settings.max_players, names=sorted(set(names)))
 
 
 def _get_version() -> Optional[str]:
@@ -130,7 +131,13 @@ def _get_last_save() -> Optional[str]:
                         last = m.group(0)
     except OSError:
         pass
-    return last
+    if last is None:
+        return None
+    try:
+        dt = datetime.strptime(last, "%d/%m/%Y %H:%M:%S").replace(tzinfo=timezone.utc)
+        return dt.isoformat().replace("+00:00", "Z")
+    except ValueError:
+        return None
 
 
 def _get_server_ip() -> str:
@@ -171,7 +178,7 @@ async def get_status() -> StatusResponse:
     version = None
     join_code = None
     last_save = None
-    players = PlayerInfo(count=0, names=[])
+    players = PlayerInfo(count=0, max=settings.max_players, names=[])
 
     if running:
         version = _get_version()
@@ -190,11 +197,13 @@ async def get_status() -> StatusResponse:
         uptime_human=_format_uptime(uptime_s),
         version=version,
         players=players,
-        join_code=join_code,
-        server_ip=_get_server_ip(),
-        port=settings.port,
-        crossplay=settings.crossplay.lower() == "true",
-        public=settings.public == "1",
+        connection=ConnectionInfo(
+            ip=_get_server_ip(),
+            port=settings.port,
+            join_code=join_code,
+            crossplay=settings.crossplay.lower() == "true",
+            public=settings.public == "1",
+        ),
         last_save=last_save,
     )
 
@@ -231,3 +240,16 @@ async def restart_server(background_tasks: BackgroundTasks) -> ActionResponse:
 async def backup_server(background_tasks: BackgroundTasks) -> ActionResponse:
     background_tasks.add_task(_run_manager_command, "backup")
     return ActionResponse(accepted=True, message="Backup command accepted.")
+
+
+@router.get("/capabilities")
+async def get_capabilities() -> dict:
+    return {
+        "server_type": settings.server_type,
+        "capabilities": {
+            "control": ["start", "stop", "restart", "backup"],
+            "config": False,
+            "mods": False,
+            "log_stream": True,
+        },
+    }
