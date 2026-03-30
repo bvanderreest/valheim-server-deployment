@@ -33,9 +33,8 @@ app = FastAPI(
     description=f"Managing {settings.server_label} ({settings.server_type})",
     version="1.0.0",
     lifespan=lifespan,
-    # Docs disabled in production — re-enable locally by removing these lines
-    docs_url=None,
-    redoc_url=None,
+    docs_url="/docs" if settings.api_docs_enabled else None,
+    redoc_url="/redoc" if settings.api_docs_enabled else None,
 )
 
 app.add_middleware(

@@ -16,8 +16,12 @@ class Settings(BaseSettings):
     # Auth — comma-separated keys, e.g. "key1,key2"
     api_keys: str = ""
 
-    # CORS — comma-separated origins, or "*" for any
-    cors_origins: str = "*"
+    # CORS — comma-separated origins (e.g. "https://dashboard.example.com").
+    # No default: operators must explicitly allow their dashboard origin.
+    cors_origins: str = ""
+
+    # Set to true to expose /docs and /redoc (disable in production)
+    api_docs_enabled: bool = False
 
     # Server identity (shown in every response so the dashboard knows which server this is)
     server_type: str = "valheim"
@@ -56,8 +60,6 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        if self.cors_origins.strip() == "*":
-            return ["*"]
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
