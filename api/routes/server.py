@@ -76,12 +76,21 @@ def _tail_log(n: int) -> list[str]:
 
 def _get_player_info() -> PlayerInfo:
     tail = _tail_log(2000)
-    connected = sum(1 for line in tail if "Server: New peer connected" in line)
-    disconnected = sum(1 for line in tail if "RPC_Disconnect" in line)
+
+    # Anchor to the last server start so we only count connections in the
+    # current session — avoids treating historical log entries as live players
+    start_idx = 0
+    for i, line in enumerate(tail):
+        if "Valheim version:" in line or "Game server connected" in line:
+            start_idx = i
+    session_lines = tail[start_idx:]
+
+    connected = sum(1 for line in session_lines if "Server: New peer connected" in line)
+    disconnected = sum(1 for line in session_lines if "RPC_Disconnect" in line)
     count = max(0, connected - disconnected)
 
     names: list[str] = []
-    for line in tail:
+    for line in session_lines:
         if "Got character ZDOID from" not in line:
             continue
         if " 0:0" in line:
@@ -142,7 +151,11 @@ def _get_last_save() -> Optional[str]:
 
 def _get_server_ip() -> str:
     try:
-        return socket.gethostbyname(socket.gethostname())
+        # Connect a UDP socket to a routable address (no data sent) to discover
+        # the outbound interface IP — avoids returning 127.x.x.x loopback aliases
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))
+            return s.getsockname()[0]
     except OSError:
         return "127.0.0.1"
 

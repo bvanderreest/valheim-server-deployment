@@ -91,9 +91,9 @@ file in `audits/` named `YYYY-MM-DD-<type>.md`. These are immutable once written
 
 ## Quick Reference — Current Sprint
 
-**Sprint 001 — Shell Layer & Stability**
-Target: v0.2.0 · Status: PLANNED
-Branch: `feature/sprint-001-shell-stability`
+**Sprint 002 — API Uplift Phase 1: Reshaping + Capabilities**
+Target: v0.3.0 · Status: ACTIVE
+Branch: `feature/sprint-002-api-uplift-phase1`
 
 ---
 
@@ -101,8 +101,8 @@ Branch: `feature/sprint-001-shell-stability`
 
 | Sprint | Goal | Version | Status |
 |--------|------|---------|--------|
-| 001 | Shell Layer & Stability | v0.2.0 | PLANNED |
-| 002 | API Uplift Phase 1: Reshaping + Capabilities | v0.3.0 | PLANNED |
+| 001 | Shell Layer & Stability | v0.2.0 | CLOSED |
+| 002 | API Uplift Phase 1: Reshaping + Capabilities | v0.3.0 | ACTIVE |
 | 003 | API Uplift Phase 2: Config Management | v0.4.0 | PLANNED |
 | 004 | API Uplift Phase 3: Mod Management | v0.5.0 | PLANNED |
 | 005 | Resilience, Backup & Crossplay | v0.6.0 | PLANNED |
