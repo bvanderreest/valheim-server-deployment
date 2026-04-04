@@ -61,6 +61,24 @@ get_uptime() {
 
 # ─── Commands ─────────────────────────────────────────────────────────────────
 
+cmd_setup() {
+    # Ensure the Python virtualenv exists and api/requirements.txt is installed.
+    # Called automatically by cmd_start and by systemd ExecStartPre.
+    local python3_bin; python3_bin="$(command -v python3 2>/dev/null || true)"
+    if [[ -z "${python3_bin}" ]]; then
+        echo "ERROR: python3 not found. Install python3 to use the API." >&2
+        exit 1
+    fi
+    local venv_dir="${SCRIPT_DIR}/.venv"
+    if [[ ! -x "${venv_dir}/bin/python" ]]; then
+        echo "[api] Creating virtualenv at ${venv_dir}..."
+        "${python3_bin}" -m venv "${venv_dir}"
+    fi
+    echo "[api] Installing/verifying API dependencies..."
+    "${venv_dir}/bin/pip" install --quiet -r "${SCRIPT_DIR}/api/requirements.txt"
+    echo "[api] Dependencies ready."
+}
+
 cmd_start() {
     if [[ "${API_ENABLED,,}" != "true" ]]; then
         echo "ERROR: API is disabled. Set API_ENABLED=true in .env to enable it." >&2
@@ -72,19 +90,11 @@ cmd_start() {
         exit 0
     fi
 
+    cmd_setup
     local uvicorn; uvicorn="$(find_uvicorn)"
     if [[ -z "${uvicorn}" ]]; then
-        echo "[api] uvicorn not found — provisioning Python dependencies..."
-        local python3_bin; python3_bin="$(command -v python3 2>/dev/null || true)"
-        if [[ -z "${python3_bin}" ]]; then
-            echo "ERROR: python3 not found. Install python3 to use the API." >&2
-            exit 1
-        fi
-        local venv_dir="${SCRIPT_DIR}/.venv"
-        "${python3_bin}" -m venv "${venv_dir}"
-        "${venv_dir}/bin/pip" install --quiet -r "${SCRIPT_DIR}/api/requirements.txt"
-        uvicorn="${venv_dir}/bin/uvicorn"
-        echo "[api] Dependencies installed."
+        echo "ERROR: uvicorn not found after setup. Check api/requirements.txt." >&2
+        exit 1
     fi
 
     echo "Starting API on ${API_HOST}:${API_PORT} ..."
@@ -165,8 +175,9 @@ case "${1:-}" in
     stop)    cmd_stop    ;;
     restart) cmd_restart ;;
     status)  cmd_status  ;;
+    setup)   cmd_setup   ;;
     *)
-        echo "Usage: $0 [start|stop|restart|status]"
+        echo "Usage: $0 [start|stop|restart|status|setup]"
         exit 1
         ;;
 esac

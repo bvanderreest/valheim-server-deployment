@@ -18,7 +18,11 @@ Group=__USER__
 
 WorkingDirectory=__SCRIPT_DIR__
 
-# Virtualenv is provisioned automatically on first 'api-manager.sh start'
+# Provision the virtualenv and install/verify dependencies before starting.
+# Uses the same logic as 'api-manager.sh setup' — safe to run on every start.
+ExecStartPre=__SCRIPT_DIR__/api-manager.sh setup
+
+# Run uvicorn directly as the foreground process so systemd can track it.
 ExecStart=__SCRIPT_DIR__/.venv/bin/uvicorn api.main:app \
     --host 127.0.0.1 \
     --port 8080 \
