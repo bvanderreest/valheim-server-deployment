@@ -102,11 +102,14 @@ preflight_check() {
   done < <(find "${SERVER_DIR}/linux64" -maxdepth 1 -name "*.so" -print0 2>/dev/null)
 
   # When crossplay is enabled, verify the additional native libraries PlayFab needs.
+  # Reference: libatomic.so.1, libpulse.so.0, libpulse-simple.so.0,
+  #            libpulse-mainloop-glib.so.0 (lloesche/valheim-server-docker).
   if [[ "${CROSSPLAY}" == "true" ]]; then
     echo "[preflight] Checking crossplay library dependencies..."
     local crossplay_missing=()
-    ldconfig -p 2>/dev/null | grep -q "libatomic.so"  || crossplay_missing+=("libatomic1")
-    ldconfig -p 2>/dev/null | grep -q "libpulse.so"   || crossplay_missing+=("libpulse0")
+    ldconfig -p 2>/dev/null | grep -q "libatomic.so"              || crossplay_missing+=("libatomic1")
+    ldconfig -p 2>/dev/null | grep -q "libpulse.so"               || crossplay_missing+=("libpulse0")
+    ldconfig -p 2>/dev/null | grep -q "libpulse-mainloop-glib.so" || crossplay_missing+=("libpulse-mainloop-glib0")
     if [[ ${#crossplay_missing[@]} -gt 0 ]]; then
       echo "[preflight] WARNING: Missing crossplay libraries: ${crossplay_missing[*]}" >&2
       echo "[preflight] Fix with: sudo apt install -y ${crossplay_missing[*]} libpulse-dev" >&2

@@ -360,8 +360,10 @@ deploy() {
     dpkg --add-architecture i386
     add-apt-repository -y multiverse
     apt-get update
-    apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip \
-      libpulse0 libpulse-dev libpulse-mainloop-glib0 pulseaudio-utils \
+    apt-get install -y \
+      lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip \
+      ca-certificates libcurl4 libsdl2-2.0-0 \
+      libpulse0 libpulse-dev libpulse-mainloop-glib0 \
       libatomic1
   elif command -v yum &> /dev/null; then
     # CentOS/RHEL/Fedora
