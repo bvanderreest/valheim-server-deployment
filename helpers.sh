@@ -101,6 +101,22 @@ preflight_check() {
     fi
   done < <(find "${SERVER_DIR}/linux64" -maxdepth 1 -name "*.so" -print0 2>/dev/null)
 
+  # When crossplay is enabled, verify the additional native libraries PlayFab needs.
+  # Reference: libatomic.so.1, libpulse.so.0, libpulse-simple.so.0,
+  #            libpulse-mainloop-glib.so.0 (lloesche/valheim-server-docker).
+  if [[ "${CROSSPLAY}" == "true" ]]; then
+    echo "[preflight] Checking crossplay library dependencies..."
+    local crossplay_missing=()
+    ldconfig -p 2>/dev/null | grep -q "libatomic.so"              || crossplay_missing+=("libatomic1")
+    ldconfig -p 2>/dev/null | grep -q "libpulse.so"               || crossplay_missing+=("libpulse0")
+    ldconfig -p 2>/dev/null | grep -q "libpulse-mainloop-glib.so" || crossplay_missing+=("libpulse-mainloop-glib0")
+    if [[ ${#crossplay_missing[@]} -gt 0 ]]; then
+      echo "[preflight] WARNING: Missing crossplay libraries: ${crossplay_missing[*]}" >&2
+      echo "[preflight] Fix with: sudo apt install -y ${crossplay_missing[*]} libpulse-dev" >&2
+      failed=1
+    fi
+  fi
+
   if [[ $failed -eq 0 ]]; then
     echo "[preflight] All library checks passed."
   else
@@ -221,4 +237,15 @@ get_last_save() {
 get_server_ip() {
   local ip; ip="$(hostname -I 2>/dev/null | cut -d' ' -f1 || echo "")"
   [[ -n "${ip}" ]] && echo "${ip}" || echo "127.0.0.1"
+}
+
+# Escape a string for safe embedding inside a JSON double-quoted value.
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"   # backslash → \\
+  s="${s//\"/\\\"}"   # " → \"
+  s="${s//$'\n'/\\n}" # newline → \n
+  s="${s//$'\r'/\\r}" # carriage return → \r
+  s="${s//$'\t'/\\t}" # tab → \t
+  printf '%s' "${s}"
 }

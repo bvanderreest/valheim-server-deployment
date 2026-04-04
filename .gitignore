@@ -37,6 +37,9 @@ server/
 .env.local
 .env.*.local
 .swarm/
+__pycache__/
+*.pyc
+*.pyo
 
 # Claude Code tooling — excluded from public GitHub mirror
 CLAUDE.md

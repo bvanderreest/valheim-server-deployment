@@ -18,11 +18,12 @@ monitor() {
   
   if [[ "${output_format}" == "json" ]]; then
     local public_bool; public_bool="$([[ "${PUBLIC}" == "1" ]] && echo "true" || echo "false")"
+    local status; status="$(is_running && echo "running" || echo "stopped")"
     echo "{"
-    echo "  \"status\": \"$(is_running && echo "running" || echo "stopped")\","
+    echo "  \"status\": \"$(json_escape "${status}")\","
     echo "  \"players\": $(count_connected_players),"
-    echo "  \"server_name\": \"${SERVER_NAME}\","
-    echo "  \"world\": \"${WORLD_NAME}\","
+    echo "  \"server_name\": \"$(json_escape "${SERVER_NAME}")\","
+    echo "  \"world\": \"$(json_escape "${WORLD_NAME}")\","
     echo "  \"port\": ${PORT},"
     echo "  \"public\": ${public_bool}"
     echo "}"

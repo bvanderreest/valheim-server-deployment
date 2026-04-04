@@ -305,8 +305,15 @@ backup() {
   local out="${BACKUP_DIR}/world-${WORLD_NAME}-${ts}.tar.gz"
   echo "[backup] Creating ${out}…"
 
+  # Build the file list — always include the primary files; add .old files when present.
+  # Valheim writes .db.old/.fwl.old just before each autosave: they are always a
+  # consistent, closed-state snapshot of the previous save cycle.
+  local backup_files=("$WORLD_NAME.db" "$WORLD_NAME.fwl")
+  [[ -f "$world_dir/$WORLD_NAME.db.old"  ]] && backup_files+=("$WORLD_NAME.db.old")
+  [[ -f "$world_dir/$WORLD_NAME.fwl.old" ]] && backup_files+=("$WORLD_NAME.fwl.old")
+
   # Perform backup synchronously
-  if tar -czf "$out" -C "$world_dir" "$WORLD_NAME.db" "$WORLD_NAME.fwl"; then
+  if tar -czf "$out" -C "$world_dir" "${backup_files[@]}"; then
     echo "[backup] OK. Backup completed successfully."
     
     # Clean up old backups, keeping the most recent BACKUPS_KEEP
@@ -360,8 +367,11 @@ deploy() {
     dpkg --add-architecture i386
     add-apt-repository -y multiverse
     apt-get update
-    apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip \
-      libpulse0 libpulse-mainloop-glib0 pulseaudio-utils
+    apt-get install -y \
+      lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip \
+      ca-certificates libcurl4 libsdl2-2.0-0 \
+      libpulse0 libpulse-dev libpulse-mainloop-glib0 \
+      libatomic1
   elif command -v yum &> /dev/null; then
     # CentOS/RHEL/Fedora
     yum install -y glibc.i686 libstdc++.i686 zlib.i686 steamcmd curl wget unzip
@@ -400,18 +410,27 @@ deploy() {
   # Install Valheim server using SteamCMD
   echo "[deploy] Installing Valheim server via SteamCMD..."
   
-  # Ensure the server directory is owned by the user who will run day-to-day commands.
-  # When deploy is run with sudo, chown back to the real user so update/start/stop
-  # work without sudo. Falls back to the current user if SUDO_USER is not set.
+  # Determine the user who will run day-to-day commands (not root).
+  # When deploy is run with sudo, SUDO_USER holds the real caller.
   local owner="${SUDO_USER:-$(whoami)}"
-  echo "[deploy] Setting ownership of ${server_dir} to ${owner}..."
-  chown -R "${owner}" "${server_dir}"
-  
+
+  # Create runtime directories (logs, worlds, backups, PID location) and
+  # transfer ownership so start/stop/backup work without sudo.
+  local pidfile_dir; pidfile_dir="$(dirname "${PIDFILE}")"
+  echo "[deploy] Creating runtime directories under ${pidfile_dir}..."
+  mkdir -p "${pidfile_dir}" "${LOG_DIR}" "${SAVEDIR}" "${BACKUP_DIR}"
+  chown -R "${owner}" "${pidfile_dir}" "${LOG_DIR}" "${SAVEDIR}" "${BACKUP_DIR}"
+
   # Install Valheim server using SteamCMD with better error handling
   if ! "${steamcmd_bin}" +force_install_dir "${server_dir}" +login anonymous +app_update 896660 validate +quit; then
     echo "[deploy] Error: Failed to install Valheim server via SteamCMD"
     exit 1
   fi
+
+  # Transfer server directory ownership to the real user after SteamCMD has
+  # written all files (SteamCMD runs as root, so files would otherwise be root-owned).
+  echo "[deploy] Setting ownership of ${server_dir} to ${owner}..."
+  chown -R "${owner}" "${server_dir}"
   
   # Verify installation
   if [[ ! -f "${server_dir}/valheim_server.x86_64" ]]; then
@@ -440,6 +459,18 @@ deploy() {
   fi
   chmod 600 "${env_file}"
   
+  # Install systemd service and timer files with correct paths/user substituted.
+  # The source files use __USER__ and __SCRIPT_DIR__ as placeholders.
+  if [[ -d "/etc/systemd/system" ]]; then
+    echo "[deploy] Installing systemd service and timer..."
+    sed -e "s|__USER__|${owner}|g" \
+        -e "s|__SCRIPT_DIR__|${SCRIPT_DIR}|g" \
+        "${SCRIPT_DIR}/valheim-backup.service" > /etc/systemd/system/valheim-backup.service
+    cp "${SCRIPT_DIR}/valheim-backup.timer" /etc/systemd/system/valheim-backup.timer
+    systemctl daemon-reload
+    echo "[deploy] Systemd units installed. Enable with: sudo systemctl enable --now valheim-backup.timer"
+  fi
+
   echo "[deploy] Deployment complete!"
   echo "[deploy] Valheim server installed at: ${server_dir}"
   echo "[deploy] Configuration updated. Please review the .env file."
