@@ -101,6 +101,19 @@ preflight_check() {
     fi
   done < <(find "${SERVER_DIR}/linux64" -maxdepth 1 -name "*.so" -print0 2>/dev/null)
 
+  # When crossplay is enabled, verify the additional native libraries PlayFab needs.
+  if [[ "${CROSSPLAY}" == "true" ]]; then
+    echo "[preflight] Checking crossplay library dependencies..."
+    local crossplay_missing=()
+    ldconfig -p 2>/dev/null | grep -q "libatomic.so"  || crossplay_missing+=("libatomic1")
+    ldconfig -p 2>/dev/null | grep -q "libpulse.so"   || crossplay_missing+=("libpulse0")
+    if [[ ${#crossplay_missing[@]} -gt 0 ]]; then
+      echo "[preflight] WARNING: Missing crossplay libraries: ${crossplay_missing[*]}" >&2
+      echo "[preflight] Fix with: sudo apt install -y ${crossplay_missing[*]} libpulse-dev" >&2
+      failed=1
+    fi
+  fi
+
   if [[ $failed -eq 0 ]]; then
     echo "[preflight] All library checks passed."
   else

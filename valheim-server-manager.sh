@@ -361,7 +361,8 @@ deploy() {
     add-apt-repository -y multiverse
     apt-get update
     apt-get install -y lib32gcc-s1 lib32stdc++6 steamcmd curl wget unzip \
-      libpulse0 libpulse-mainloop-glib0 pulseaudio-utils
+      libpulse0 libpulse-dev libpulse-mainloop-glib0 pulseaudio-utils \
+      libatomic1
   elif command -v yum &> /dev/null; then
     # CentOS/RHEL/Fedora
     yum install -y glibc.i686 libstdc++.i686 zlib.i686 steamcmd curl wget unzip
@@ -400,18 +401,27 @@ deploy() {
   # Install Valheim server using SteamCMD
   echo "[deploy] Installing Valheim server via SteamCMD..."
   
-  # Ensure the server directory is owned by the user who will run day-to-day commands.
-  # When deploy is run with sudo, chown back to the real user so update/start/stop
-  # work without sudo. Falls back to the current user if SUDO_USER is not set.
+  # Determine the user who will run day-to-day commands (not root).
+  # When deploy is run with sudo, SUDO_USER holds the real caller.
   local owner="${SUDO_USER:-$(whoami)}"
-  echo "[deploy] Setting ownership of ${server_dir} to ${owner}..."
-  chown -R "${owner}" "${server_dir}"
-  
+
+  # Create runtime directories (logs, worlds, backups, PID location) and
+  # transfer ownership so start/stop/backup work without sudo.
+  local pidfile_dir; pidfile_dir="$(dirname "${PIDFILE}")"
+  echo "[deploy] Creating runtime directories under ${pidfile_dir}..."
+  mkdir -p "${pidfile_dir}" "${LOG_DIR}" "${SAVEDIR}" "${BACKUP_DIR}"
+  chown -R "${owner}" "${pidfile_dir}" "${LOG_DIR}" "${SAVEDIR}" "${BACKUP_DIR}"
+
   # Install Valheim server using SteamCMD with better error handling
   if ! "${steamcmd_bin}" +force_install_dir "${server_dir}" +login anonymous +app_update 896660 validate +quit; then
     echo "[deploy] Error: Failed to install Valheim server via SteamCMD"
     exit 1
   fi
+
+  # Transfer server directory ownership to the real user after SteamCMD has
+  # written all files (SteamCMD runs as root, so files would otherwise be root-owned).
+  echo "[deploy] Setting ownership of ${server_dir} to ${owner}..."
+  chown -R "${owner}" "${server_dir}"
   
   # Verify installation
   if [[ ! -f "${server_dir}/valheim_server.x86_64" ]]; then
