@@ -182,7 +182,7 @@ def _run_manager_command(command: str) -> None:
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
-@router.get("/status", response_model=StatusResponse)
+@router.get("/status", response_model=StatusResponse, response_model_by_alias=True)
 async def get_status() -> StatusResponse:
     running = _is_running()
     pid = _read_pid() if running else None
@@ -199,6 +199,8 @@ async def get_status() -> StatusResponse:
         last_save = _get_last_save()
         players = _get_player_info()
 
+    ip = _get_server_ip()
+
     return StatusResponse(
         server_type=settings.server_type,
         server_label=settings.server_label,
@@ -211,48 +213,52 @@ async def get_status() -> StatusResponse:
         version=version,
         players=players,
         connection=ConnectionInfo(
-            ip=_get_server_ip(),
+            ip=ip,
             port=settings.port,
             join_code=join_code,
             crossplay=settings.crossplay.lower() == "true",
             public=settings.public == "1",
         ),
         last_save=last_save,
+        extras={
+            "crossplay": settings.crossplay.lower() == "true",
+            "public": settings.public == "1",
+        },
+        deprecated={
+            "ip": ip,
+            "join_code": join_code,
+            "player_count": players.count,
+        },
     )
 
 
-@router.post("/server/start", status_code=202, response_model=ActionResponse)
-async def start_server(background_tasks: BackgroundTasks) -> ActionResponse:
-    if _is_running():
+# Valid server control actions and their human-readable acceptance messages.
+_VALID_ACTIONS: dict[str, str] = {
+    "start":   "Start command accepted. Check /status for progress.",
+    "stop":    "Stop command accepted. Server will shut down gracefully (up to 60s).",
+    "restart": "Restart command accepted.",
+    "backup":  "Backup command accepted.",
+}
+
+
+@router.post("/server/{action}", status_code=202, response_model=ActionResponse)
+async def server_action(action: str, background_tasks: BackgroundTasks) -> ActionResponse:
+    if action not in _VALID_ACTIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown action '{action}'. Valid actions: {list(_VALID_ACTIONS)}",
+        )
+    if action == "start" and _is_running():
         raise HTTPException(status_code=409, detail="Server is already running.")
-    background_tasks.add_task(_run_manager_command, "start")
-    return ActionResponse(
-        accepted=True,
-        message="Start command accepted. Check /status for progress.",
-    )
-
-
-@router.post("/server/stop", status_code=202, response_model=ActionResponse)
-async def stop_server(background_tasks: BackgroundTasks) -> ActionResponse:
-    if not _is_running():
+    if action == "stop" and not _is_running():
         raise HTTPException(status_code=409, detail="Server is not running.")
-    background_tasks.add_task(_run_manager_command, "stop")
+
+    background_tasks.add_task(_run_manager_command, action)
     return ActionResponse(
+        action=action,
         accepted=True,
-        message="Stop command accepted. Server will shut down gracefully (up to 60s).",
+        message=_VALID_ACTIONS[action],
     )
-
-
-@router.post("/server/restart", status_code=202, response_model=ActionResponse)
-async def restart_server(background_tasks: BackgroundTasks) -> ActionResponse:
-    background_tasks.add_task(_run_manager_command, "restart")
-    return ActionResponse(accepted=True, message="Restart command accepted.")
-
-
-@router.post("/server/backup", status_code=202, response_model=ActionResponse)
-async def backup_server(background_tasks: BackgroundTasks) -> ActionResponse:
-    background_tasks.add_task(_run_manager_command, "backup")
-    return ActionResponse(accepted=True, message="Backup command accepted.")
 
 
 @router.get("/capabilities")
@@ -260,7 +266,7 @@ async def get_capabilities() -> dict:
     return {
         "server_type": settings.server_type,
         "capabilities": {
-            "control": ["start", "stop", "restart", "backup"],
+            "control": list(_VALID_ACTIONS),
             "config": False,
             "mods": False,
             "log_stream": True,
