@@ -3,7 +3,7 @@ Description=Valheim Server Backup Timer
 Requires=valheim-backup.service
 
 [Timer]
-OnCalendar=daily
+OnCalendar=hourly
 Persistent=true
 
 [Install]

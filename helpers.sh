@@ -238,3 +238,14 @@ get_server_ip() {
   local ip; ip="$(hostname -I 2>/dev/null | cut -d' ' -f1 || echo "")"
   [[ -n "${ip}" ]] && echo "${ip}" || echo "127.0.0.1"
 }
+
+# Escape a string for safe embedding inside a JSON double-quoted value.
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"   # backslash → \\
+  s="${s//\"/\\\"}"   # " → \"
+  s="${s//$'\n'/\\n}" # newline → \n
+  s="${s//$'\r'/\\r}" # carriage return → \r
+  s="${s//$'\t'/\\t}" # tab → \t
+  printf '%s' "${s}"
+}

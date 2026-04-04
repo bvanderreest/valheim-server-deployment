@@ -305,8 +305,15 @@ backup() {
   local out="${BACKUP_DIR}/world-${WORLD_NAME}-${ts}.tar.gz"
   echo "[backup] Creating ${out}…"
 
+  # Build the file list — always include the primary files; add .old files when present.
+  # Valheim writes .db.old/.fwl.old just before each autosave: they are always a
+  # consistent, closed-state snapshot of the previous save cycle.
+  local backup_files=("$WORLD_NAME.db" "$WORLD_NAME.fwl")
+  [[ -f "$world_dir/$WORLD_NAME.db.old"  ]] && backup_files+=("$WORLD_NAME.db.old")
+  [[ -f "$world_dir/$WORLD_NAME.fwl.old" ]] && backup_files+=("$WORLD_NAME.fwl.old")
+
   # Perform backup synchronously
-  if tar -czf "$out" -C "$world_dir" "$WORLD_NAME.db" "$WORLD_NAME.fwl"; then
+  if tar -czf "$out" -C "$world_dir" "${backup_files[@]}"; then
     echo "[backup] OK. Backup completed successfully."
     
     # Clean up old backups, keeping the most recent BACKUPS_KEEP
@@ -452,6 +459,18 @@ deploy() {
   fi
   chmod 600 "${env_file}"
   
+  # Install systemd service and timer files with correct paths/user substituted.
+  # The source files use __USER__ and __SCRIPT_DIR__ as placeholders.
+  if [[ -d "/etc/systemd/system" ]]; then
+    echo "[deploy] Installing systemd service and timer..."
+    sed -e "s|__USER__|${owner}|g" \
+        -e "s|__SCRIPT_DIR__|${SCRIPT_DIR}|g" \
+        "${SCRIPT_DIR}/valheim-backup.service" > /etc/systemd/system/valheim-backup.service
+    cp "${SCRIPT_DIR}/valheim-backup.timer" /etc/systemd/system/valheim-backup.timer
+    systemctl daemon-reload
+    echo "[deploy] Systemd units installed. Enable with: sudo systemctl enable --now valheim-backup.timer"
+  fi
+
   echo "[deploy] Deployment complete!"
   echo "[deploy] Valheim server installed at: ${server_dir}"
   echo "[deploy] Configuration updated. Please review the .env file."
