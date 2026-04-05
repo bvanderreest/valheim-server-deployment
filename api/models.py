@@ -63,3 +63,20 @@ class LogsResponse(BaseModel):
     lines: list[str]
     count: int
     log_file: str
+
+
+class ConfigResponse(BaseModel):
+    server_type: str
+    server_label: str
+    config: dict[str, str]
+    config_file: str
+    editable_keys: list[str]
+
+
+class ConfigUpdateRequest(BaseModel):
+    changes: dict[str, str]
+
+
+class ConfigUpdateResponse(BaseModel):
+    applied: dict[str, str]
+    restart_required: bool

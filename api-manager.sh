@@ -66,7 +66,9 @@ cmd_setup() {
     # Called automatically by cmd_start and by systemd ExecStartPre.
     local python3_bin; python3_bin="$(command -v python3 2>/dev/null || true)"
     if [[ -z "${python3_bin}" ]]; then
-        echo "ERROR: python3 not found. Install python3 to use the API." >&2
+        echo "ERROR: python3 not found — required to run the API." >&2
+        echo "  Fix (Debian/Ubuntu): sudo apt-get install python3 python3-venv" >&2
+        echo "  Fix (RHEL/CentOS):   sudo yum install python3" >&2
         exit 1
     fi
     local venv_dir="${SCRIPT_DIR}/.venv"
@@ -93,7 +95,9 @@ cmd_start() {
     cmd_setup
     local uvicorn; uvicorn="$(find_uvicorn)"
     if [[ -z "${uvicorn}" ]]; then
-        echo "ERROR: uvicorn not found after setup. Check api/requirements.txt." >&2
+        echo "ERROR: uvicorn not found after setup." >&2
+        echo "  Check: ${SCRIPT_DIR}/api/requirements.txt" >&2
+        echo "  Fix:   ${SCRIPT_DIR}/api-manager.sh setup" >&2
         exit 1
     fi
 

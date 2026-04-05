@@ -36,6 +36,9 @@ app.dependency_overrides[require_api_key] = _override_auth
 client = TestClient(app, raise_server_exceptions=True)
 HEADERS = {"X-API-Key": TEST_KEY}
 
+# Client without auth override — used to verify 401 responses
+no_auth_client = TestClient(app, raise_server_exceptions=False)
+
 
 # ─── Fixtures / shared mocks ──────────────────────────────────────────────────
 
@@ -235,7 +238,7 @@ class TestCapabilities:
         data = r.json()
         assert "server_type" in data
         caps = data["capabilities"]
-        assert caps["config"] is False
+        assert caps["config"] is True
         assert caps["mods"] is False
         assert caps["log_stream"] is True
         assert "start" in caps["control"]
@@ -277,3 +280,145 @@ class TestLogsStream:
         with client.stream("GET", "/logs/stream", headers=HEADERS) as r:
             assert r.status_code == 200
             assert "text/event-stream" in r.headers["content-type"]
+
+
+# ─── GET /config ──────────────────────────────────────────────────────────────
+
+def _mock_settings(tmp_path):
+    """Return a mock settings object pointing script_dir at tmp_path."""
+    m = MagicMock()
+    m.script_dir = tmp_path
+    m.server_type = "valheim"
+    m.server_label = "Valheim Server"
+    return m
+
+
+class TestGetConfig:
+    def test_returns_required_fields(self, tmp_path):
+        (tmp_path / ".env").write_text('SERVER_NAME="TestServer"\nPASSWORD="secret"\nAPI_KEYS="hidden"\n')
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.get("/config", headers=HEADERS)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["server_type"] == "valheim"
+        assert "config" in body
+        assert "editable_keys" in body
+        assert "config_file" in body
+
+    def test_excludes_api_keys(self, tmp_path):
+        (tmp_path / ".env").write_text('API_KEYS="supersecret"\nSERVER_NAME="Test"\n')
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.get("/config", headers=HEADERS)
+        assert r.status_code == 200
+        config = r.json()["config"]
+        assert "API_KEYS" not in config
+        assert "SERVER_NAME" in config
+
+    def test_masks_password(self, tmp_path):
+        (tmp_path / ".env").write_text('PASSWORD="mypassword"\nSERVER_NAME="Test"\n')
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.get("/config", headers=HEADERS)
+        assert r.status_code == 200
+        assert r.json()["config"]["PASSWORD"] == "****"
+
+    def test_excluded_keys_not_in_editable_keys(self, tmp_path):
+        (tmp_path / ".env").write_text("")
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.get("/config", headers=HEADERS)
+        editable = set(r.json()["editable_keys"])
+        for excluded in ("API_KEYS", "API_ENABLED", "API_HOST", "API_PORT", "CORS_ORIGINS", "LOG_DIR"):
+            assert excluded not in editable
+
+    def test_requires_auth(self):
+        app.dependency_overrides.clear()
+        try:
+            r = no_auth_client.get("/config")
+            assert r.status_code == 401
+        finally:
+            app.dependency_overrides[require_api_key] = _override_auth
+
+
+# ─── PATCH /config ────────────────────────────────────────────────────────────
+
+class TestPatchConfig:
+    def test_applies_editable_key(self, tmp_path):
+        (tmp_path / ".env").write_text('SERVER_NAME="OldName"\n')
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.patch("/config", json={"changes": {"SERVER_NAME": "NewName"}}, headers=HEADERS)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["applied"]["SERVER_NAME"] == "NewName"
+        assert body["restart_required"] is True
+
+    def test_rejects_excluded_key(self, tmp_path):
+        (tmp_path / ".env").write_text("")
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.patch("/config", json={"changes": {"API_KEYS": "hacked"}}, headers=HEADERS)
+        assert r.status_code == 400
+
+    def test_rejects_unknown_key(self, tmp_path):
+        (tmp_path / ".env").write_text("")
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.patch("/config", json={"changes": {"TOTALLY_MADE_UP": "val"}}, headers=HEADERS)
+        assert r.status_code == 400
+
+    def test_backup_created(self, tmp_path):
+        (tmp_path / ".env").write_text('SAVE_INTERVAL="300"\n')
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            client.patch("/config", json={"changes": {"SAVE_INTERVAL": "600"}}, headers=HEADERS)
+        assert len(list(tmp_path.glob(".env.bak.*"))) == 1
+
+    def test_no_restart_required_for_non_critical_key(self, tmp_path):
+        (tmp_path / ".env").write_text('SAVE_INTERVAL="300"\n')
+        with patch("api.routes.config.settings", _mock_settings(tmp_path)):
+            r = client.patch("/config", json={"changes": {"SAVE_INTERVAL": "600"}}, headers=HEADERS)
+        assert r.status_code == 200
+        assert r.json()["restart_required"] is False
+
+    def test_requires_auth(self):
+        app.dependency_overrides.clear()
+        try:
+            r = no_auth_client.patch("/config", json={"changes": {"SAVE_INTERVAL": "600"}})
+            assert r.status_code == 401
+        finally:
+            app.dependency_overrides[require_api_key] = _override_auth
+
+
+# ─── GET /metrics ─────────────────────────────────────────────────────────────
+
+class TestMetrics:
+    def test_returns_200_unauthenticated(self):
+        r = no_auth_client.get("/metrics")
+        assert r.status_code == 200
+
+    def test_content_type_is_plain_text(self):
+        r = client.get("/metrics")
+        assert "text/plain" in r.headers["content-type"]
+
+    def test_contains_required_metric_names(self):
+        r = client.get("/metrics")
+        body = r.text
+        for metric in (
+            "valheim_server_running",
+            "valheim_server_uptime_seconds",
+            "valheim_players_connected",
+            "valheim_backup_count",
+            "valheim_world_size_bytes",
+            "valheim_last_save_age_seconds",
+        ):
+            assert metric in body
+
+    def test_each_metric_has_help_and_type_lines(self):
+        r = client.get("/metrics")
+        body = r.text
+        assert "# HELP valheim_server_running" in body
+        assert "# TYPE valheim_server_running gauge" in body
+
+    def test_metric_values_are_numeric(self):
+        r = client.get("/metrics")
+        for line in r.text.splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            parts = line.split()
+            assert len(parts) == 2, f"Expected 'name value', got: {line!r}"
+            float(parts[1])  # must be parseable as a number

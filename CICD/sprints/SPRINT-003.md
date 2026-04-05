@@ -1,10 +1,10 @@
 # Sprint 003 — API Uplift Phase 2: Config Management
 
-**Status:** PLANNED
+**Status:** IN REVIEW
 **Branch:** `feature/sprint-003-api-uplift-phase2`
 **Milestone:** Sprint 003 — API Uplift Phase 2: Config (Gitea Milestone #19)
 **Version Target:** v0.4.0
-**Started:** —
+**Started:** 2026-04-05
 **Closed:** —
 
 ---
@@ -19,15 +19,17 @@ Implement Phase 2 of the API uplift — server configuration read and write via 
 
 | # | Task | Status | Issue |
 |---|------|--------|-------|
-| 1 | `GET /config` — read `.env`, mask `password`, apply exclusion list | [ ] | |
-| 2 | `PATCH /config` — validate editable keys, atomic write, file lock, backup `.env.bak.<ts>` | [ ] | |
-| 3 | New `api/routes/config.py` with both handlers | [ ] | |
-| 4 | Config read/write helpers + exclusion list in `api/config.py` | [ ] | |
-| 5 | New Pydantic models: `ConfigResponse`, `ConfigUpdateRequest`, `ConfigUpdateResponse` | [ ] | |
-| 6 | Update `GET /capabilities` — set `config: true` | [ ] | |
-| 7 | Unit tests — exclusion, masking, validation, out-of-range rejection | [ ] | |
-| 8 | Integration tests — config round-trip, backup creation | [ ] | |
-| 9 | Security tests — excluded key write rejection, no path leak in errors | [ ] | |
+| 1 | API lifecycle in `valheim-server-manager.sh` — co-start/stop, stats section, usage reference | [x] | #60 |
+| 2 | `GET /config` — read `.env`, mask `password`, apply exclusion list | [ ] | #43 |
+| 3 | `PATCH /config` — validate editable keys, atomic write, file lock, backup `.env.bak.<ts>` | [ ] | #43 |
+| 4 | New `api/routes/config.py` with both handlers | [ ] | #43 |
+| 5 | Config read/write helpers + exclusion list in `api/config.py` | [ ] | #43 |
+| 6 | New Pydantic models: `ConfigResponse`, `ConfigUpdateRequest`, `ConfigUpdateResponse` | [ ] | #43 |
+| 7 | Update `GET /capabilities` — set `config: true` | [ ] | #43 |
+| 8 | Unit tests — exclusion, masking, validation, out-of-range rejection | [ ] | #43 |
+| 9 | Integration tests — config round-trip, backup creation | [ ] | #43 |
+| 10 | Security tests — excluded key write rejection, no path leak in errors | [ ] | #43 |
+| 11 | `GET /metrics` — Prometheus text format, unauthenticated | [x] | #26 |
 
 ---
 
