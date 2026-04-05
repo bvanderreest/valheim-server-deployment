@@ -268,7 +268,7 @@ async def get_capabilities() -> dict:
         "server_type": settings.server_type,
         "capabilities": {
             "control": list(_VALID_ACTIONS),
-            "config": False,
+            "config": True,
             "mods": False,
             "log_stream": True,
         },

@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .auth import require_api_key
 from .config import settings
 from .models import HealthResponse
+from .routes.config import router as config_router
 from .routes.logs import router as logs_router
 from .routes.server import router as server_router
 
@@ -41,7 +42,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["X-API-Key", "Content-Type"],
 )
 
@@ -59,3 +60,4 @@ async def health() -> HealthResponse:
 # All routes in these routers require a valid API key
 app.include_router(server_router, dependencies=[Depends(require_api_key)])
 app.include_router(logs_router, dependencies=[Depends(require_api_key)])
+app.include_router(config_router, dependencies=[Depends(require_api_key)])
