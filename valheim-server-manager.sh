@@ -140,7 +140,7 @@ start() {
     # Latest meaningful log line — strip timestamp, filter known Unity/Steam noise.
     # grep -v removes lines that are purely internal chatter with no operator value.
     local last_log
-    last_log=$(grep -v \
+    last_log=$(tail -200 "${LOGFILE}" 2>/dev/null | grep -v \
       -e "Fallback handler could not load library" \
       -e "Unloading [0-9]* Unused" \
       -e "^\[Physics" \
@@ -149,7 +149,7 @@ start() {
       -e "^Mono " \
       -e "^Desktop is" \
       -e "^Using GLFW" \
-      "${LOGFILE}" 2>/dev/null | tail -1 \
+      | tail -1 \
       | sed 's|^[0-9][0-9]/[0-9][0-9]/[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9]: ||' \
       | cut -c1-55 || true)
 
