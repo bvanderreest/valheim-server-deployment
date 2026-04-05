@@ -61,6 +61,24 @@ get_uptime() {
 
 # ─── Commands ─────────────────────────────────────────────────────────────────
 
+cmd_setup() {
+    # Ensure the Python virtualenv exists and api/requirements.txt is installed.
+    # Called automatically by cmd_start and by systemd ExecStartPre.
+    local python3_bin; python3_bin="$(command -v python3 2>/dev/null || true)"
+    if [[ -z "${python3_bin}" ]]; then
+        echo "ERROR: python3 not found. Install python3 to use the API." >&2
+        exit 1
+    fi
+    local venv_dir="${SCRIPT_DIR}/.venv"
+    if [[ ! -x "${venv_dir}/bin/python" ]]; then
+        echo "[api] Creating virtualenv at ${venv_dir}..."
+        "${python3_bin}" -m venv "${venv_dir}"
+    fi
+    echo "[api] Installing/verifying API dependencies..."
+    "${venv_dir}/bin/pip" install --quiet -r "${SCRIPT_DIR}/api/requirements.txt"
+    echo "[api] Dependencies ready."
+}
+
 cmd_start() {
     if [[ "${API_ENABLED,,}" != "true" ]]; then
         echo "ERROR: API is disabled. Set API_ENABLED=true in .env to enable it." >&2
@@ -72,11 +90,19 @@ cmd_start() {
         exit 0
     fi
 
+    cmd_setup
     local uvicorn; uvicorn="$(find_uvicorn)"
     if [[ -z "${uvicorn}" ]]; then
-        echo "ERROR: uvicorn not found. Install dependencies first:" >&2
-        echo "  python3 -m venv .venv && .venv/bin/pip install -r api/requirements.txt" >&2
+        echo "ERROR: uvicorn not found after setup. Check api/requirements.txt." >&2
         exit 1
+    fi
+
+    # Rotate log before starting: keep up to 3 old logs
+    local log_file="${SCRIPT_DIR}/.api.log"
+    if [[ -s "${log_file}" ]]; then
+        mv -f "${log_file}.2" "${log_file}.3" 2>/dev/null || true
+        mv -f "${log_file}.1" "${log_file}.2" 2>/dev/null || true
+        mv -f "${log_file}"   "${log_file}.1" 2>/dev/null || true
     fi
 
     echo "Starting API on ${API_HOST}:${API_PORT} ..."
@@ -86,20 +112,29 @@ cmd_start() {
         --workers 1 \
         --log-level info \
         --access-log \
-        > "${SCRIPT_DIR}/.api.log" 2>&1 &
+        > "${log_file}" 2>&1 &
 
     local pid=$!
     echo "${pid}" > "${PID_FILE}"
 
-    # Brief wait to confirm it stayed up
-    sleep 2
-    if kill -0 "${pid}" 2>/dev/null; then
-        echo "API started (PID ${pid}). Listening on ${API_HOST}:${API_PORT}"
-    else
-        echo "ERROR: API process exited immediately. Check .api.log for details." >&2
-        rm -f "${PID_FILE}"
-        exit 1
-    fi
+    # Poll /health until the API is serving (up to 15s)
+    local waited=0
+    until curl -sf "http://${API_HOST}:${API_PORT}/health" >/dev/null 2>&1; do
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            echo "ERROR: API process exited immediately. Check .api.log for details." >&2
+            rm -f "${PID_FILE}"
+            exit 1
+        fi
+        if [[ ${waited} -ge 15 ]]; then
+            echo "ERROR: API did not become healthy within 15s. Check .api.log for details." >&2
+            rm -f "${PID_FILE}"
+            exit 1
+        fi
+        sleep 1
+        (( waited++ ))
+    done
+
+    echo "API started (PID ${pid}). Listening on ${API_HOST}:${API_PORT}"
 }
 
 cmd_stop() {
@@ -157,8 +192,9 @@ case "${1:-}" in
     stop)    cmd_stop    ;;
     restart) cmd_restart ;;
     status)  cmd_status  ;;
+    setup)   cmd_setup   ;;
     *)
-        echo "Usage: $0 [start|stop|restart|status]"
+        echo "Usage: $0 [start|stop|restart|status|setup]"
         exit 1
         ;;
 esac

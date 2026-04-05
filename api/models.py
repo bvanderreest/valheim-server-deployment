@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class HealthResponse(BaseModel):
@@ -24,7 +24,9 @@ class ConnectionInfo(BaseModel):
 
 
 class StatusResponse(BaseModel):
-    # Identity — lets the dashboard know which server this is
+    model_config = ConfigDict(populate_by_name=True)
+
+    # Identity
     server_type: str
     server_label: str
     server_name: str
@@ -42,13 +44,22 @@ class StatusResponse(BaseModel):
     connection: ConnectionInfo
     last_save: Optional[str]
 
+    # Server-specific extras not covered by the standard shape
+    extras: dict
+
+    # Legacy top-level fields preserved for backward-compat consumers.
+    # serialization_alias ensures the JSON key is "_deprecated" while the
+    # Python attribute remains a valid identifier.
+    deprecated: dict = Field(serialization_alias="_deprecated")
+
 
 class ActionResponse(BaseModel):
+    action: str
     accepted: bool
     message: str
 
 
 class LogsResponse(BaseModel):
     lines: list[str]
-    total_lines: int
-    logfile: str
+    count: int
+    log_file: str

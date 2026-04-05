@@ -467,8 +467,14 @@ deploy() {
         -e "s|__SCRIPT_DIR__|${SCRIPT_DIR}|g" \
         "${SCRIPT_DIR}/valheim-backup.service" > /etc/systemd/system/valheim-backup.service
     cp "${SCRIPT_DIR}/valheim-backup.timer" /etc/systemd/system/valheim-backup.timer
+    sed -e "s|__USER__|${owner}|g" \
+        -e "s|__SCRIPT_DIR__|${SCRIPT_DIR}|g" \
+        "${SCRIPT_DIR}/api/valheim-api.service" > /etc/systemd/system/valheim-api.service
     systemctl daemon-reload
-    echo "[deploy] Systemd units installed. Enable with: sudo systemctl enable --now valheim-backup.timer"
+    echo "[deploy] Systemd units installed."
+    echo "[deploy]   Backup timer : sudo systemctl enable --now valheim-backup.timer"
+    echo "[deploy]   API (opt-in) : set API_ENABLED=true in .env first, then:"
+    echo "[deploy]                  sudo systemctl enable --now valheim-api"
   fi
 
   echo "[deploy] Deployment complete!"
