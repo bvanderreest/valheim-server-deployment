@@ -75,12 +75,12 @@ start() {
 
   # Milestone patterns fired by the Valheim server log in sequence.
   # Labels describe what was just ACHIEVED (shown after each milestone is confirmed).
-  # "DungeonDB done" marks world load complete (not Start, which fires at the beginning).
+  # "DungeonDB Start" marks world loading beginning — "DungeonDB done" does not appear in this Valheim build's log.
   # The crossplay join-code step is added only when CROSSPLAY=true.
   local -a ms_patterns=(
     "Initialize engine version"
     "Steam game server initialized"
-    "DungeonDB done"
+    "DungeonDB Start"
     "Game server connected"
   )
   local -a ms_labels=(
