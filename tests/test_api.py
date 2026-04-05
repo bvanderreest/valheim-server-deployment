@@ -243,7 +243,7 @@ class TestCapabilities:
     def test_control_actions_match_server_actions(self):
         r = client.get("/capabilities", headers=HEADERS)
         control = set(r.json()["capabilities"]["control"])
-        assert control == {"start", "stop", "restart", "backup"}
+        assert control == {"start", "stop", "restart", "backup", "update"}
 
 
 # ─── GET /logs/stream (SSE format) ───────────────────────────────────────────

@@ -97,6 +97,14 @@ cmd_start() {
         exit 1
     fi
 
+    # Rotate log before starting: keep up to 3 old logs
+    local log_file="${SCRIPT_DIR}/.api.log"
+    if [[ -s "${log_file}" ]]; then
+        mv -f "${log_file}.2" "${log_file}.3" 2>/dev/null || true
+        mv -f "${log_file}.1" "${log_file}.2" 2>/dev/null || true
+        mv -f "${log_file}"   "${log_file}.1" 2>/dev/null || true
+    fi
+
     echo "Starting API on ${API_HOST}:${API_PORT} ..."
     nohup "${uvicorn}" api.main:app \
         --host "${API_HOST}" \
@@ -104,20 +112,29 @@ cmd_start() {
         --workers 1 \
         --log-level info \
         --access-log \
-        > "${SCRIPT_DIR}/.api.log" 2>&1 &
+        > "${log_file}" 2>&1 &
 
     local pid=$!
     echo "${pid}" > "${PID_FILE}"
 
-    # Brief wait to confirm it stayed up
-    sleep 2
-    if kill -0 "${pid}" 2>/dev/null; then
-        echo "API started (PID ${pid}). Listening on ${API_HOST}:${API_PORT}"
-    else
-        echo "ERROR: API process exited immediately. Check .api.log for details." >&2
-        rm -f "${PID_FILE}"
-        exit 1
-    fi
+    # Poll /health until the API is serving (up to 15s)
+    local waited=0
+    until curl -sf "http://${API_HOST}:${API_PORT}/health" >/dev/null 2>&1; do
+        if ! kill -0 "${pid}" 2>/dev/null; then
+            echo "ERROR: API process exited immediately. Check .api.log for details." >&2
+            rm -f "${PID_FILE}"
+            exit 1
+        fi
+        if [[ ${waited} -ge 15 ]]; then
+            echo "ERROR: API did not become healthy within 15s. Check .api.log for details." >&2
+            rm -f "${PID_FILE}"
+            exit 1
+        fi
+        sleep 1
+        (( waited++ ))
+    done
+
+    echo "API started (PID ${pid}). Listening on ${API_HOST}:${API_PORT}"
 }
 
 cmd_stop() {

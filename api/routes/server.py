@@ -238,6 +238,7 @@ _VALID_ACTIONS: dict[str, str] = {
     "stop":    "Stop command accepted. Server will shut down gracefully (up to 60s).",
     "restart": "Restart command accepted.",
     "backup":  "Backup command accepted.",
+    "update":  "Update command accepted. Server will stop, update, and exit.",
 }
 
 
