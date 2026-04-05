@@ -24,7 +24,8 @@ start() {
 
   # Verify server directory exists before attempting to cd
   if [[ ! -d "${SERVER_DIR}" ]]; then
-    echo "Error: Server directory does not exist: ${SERVER_DIR}"
+    echo "Error: Server directory not found: ${SERVER_DIR}"
+    echo "  Fix: sudo ./valheim-server-manager.sh deploy"
     exit 1
   fi
 
@@ -109,7 +110,9 @@ start() {
     if ! kill -0 "${pid}" 2>/dev/null; then
       printf "  %-14s  [%-${bar_width}s] FAILED\n" "Process exited" ""
       echo "───────────────────────────────────────────────────────────"
-      echo "  Run './valheim-server-manager.sh logs' to diagnose."
+      echo "  The server process exited unexpectedly."
+      echo "  Check logs: ./valheim-server-manager.sh logs"
+      echo "  Common causes: missing Steam libs, bad .env config, port in use."
       echo "═══════════════════════════════════════════════════════════"
       rm -f "${PIDFILE}"
       exit 1
@@ -142,7 +145,9 @@ start() {
   if [[ $elapsed -ge $timeout ]]; then
     printf "  %-14s  [%-${bar_width}s] TIMEOUT\n" "Timed out" ""
     echo "───────────────────────────────────────────────────────────"
-    echo "  Server may still be loading. Check logs for details."
+    echo "  Server did not reach ready state within ${timeout}s."
+    echo "  It may still be loading — check: ./valheim-server-manager.sh logs"
+    echo "  To stop and retry: ./valheim-server-manager.sh stop"
     echo "═══════════════════════════════════════════════════════════"
     exit 1
   fi
@@ -152,10 +157,13 @@ start() {
 
   if [[ "${API_ENABLED,,}" == "true" ]]; then
     printf "  %-12s " "API:"
-    if "${SCRIPT_DIR}/api-manager.sh" start >/dev/null 2>&1; then
+    local api_out
+    if api_out=$("${SCRIPT_DIR}/api-manager.sh" start 2>&1); then
       echo "Started on ${API_HOST:-127.0.0.1}:${API_PORT:-8080}"
     else
-      echo "Failed to start (check .api.log)"
+      local last_err; last_err=$(echo "${api_out}" | grep -i "error\|not found" | tail -1)
+      echo "Failed to start${last_err:+ — ${last_err}}"
+      echo "  Diagnose: ./api-manager.sh setup && ./api-manager.sh start"
     fi
   fi
 
@@ -294,7 +302,11 @@ check_steam_connectivity() {
 
 update() {
   if [[ "${USE_STEAMCMD_UPDATE}" != "true" ]]; then echo "SteamCMD update disabled."; return 0; fi
-  [[ -x "${STEAMCMD_BIN}" ]] || { echo "SteamCMD not found at ${STEAMCMD_BIN}"; exit 1; }
+  if [[ ! -x "${STEAMCMD_BIN}" ]]; then
+    echo "Error: SteamCMD not found at ${STEAMCMD_BIN}"
+    echo "  Fix: sudo ./valheim-server-manager.sh deploy"
+    exit 1
+  fi
   is_running && { echo "[update] Stopping…"; stop; }
 
   # Remove stale Steam lock files that cause "didn't shutdown cleanly" timeouts
