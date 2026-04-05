@@ -73,13 +73,14 @@ start() {
   printf "  %-12s %s\n" "Log:"       "${LOGFILE}"
   echo "───────────────────────────────────────────────────────────"
 
-  # Track startup by watching the log for known Valheim milestone strings (from real log analysis).
-  # The first 4 milestones are common to all configurations.
-  # The 5th milestone (PlayFab join code) only appears when CROSSPLAY=true — omitted for local/private servers.
+  # Milestone patterns fired by the Valheim server log in sequence.
+  # Labels describe what was just ACHIEVED (shown after each milestone is confirmed).
+  # "DungeonDB done" marks world load complete (not Start, which fires at the beginning).
+  # The crossplay join-code step is added only when CROSSPLAY=true.
   local -a ms_patterns=(
     "Initialize engine version"
     "Steam game server initialized"
-    "DungeonDB Start"
+    "DungeonDB done"
     "Game server connected"
   )
   local -a ms_labels=(
@@ -90,7 +91,7 @@ start() {
   )
   if [[ "${CROSSPLAY}" == "true" ]]; then
     ms_patterns+=("registered with join code")
-    ms_labels+=("Ready         ")
+    ms_labels+=("Crossplay     ")
   fi
   local total=${#ms_patterns[@]}
   local bar_width=20
@@ -103,12 +104,14 @@ start() {
   local timeout=300
   local elapsed=0
 
-  printf "  Starting...     [%-${bar_width}s]   0%%\r" ""
+  # Two-line display: bar line + live log line below it.
+  # Subsequent ticks use ANSI cursor-up to redraw both lines in place.
+  printf "  Starting...     [%-${bar_width}s]   0%%\n  \n" ""
 
   while [[ $elapsed -lt $timeout ]]; do
     # Fail fast if the process died
     if ! kill -0 "${pid}" 2>/dev/null; then
-      printf "  %-14s  [%-${bar_width}s] FAILED\n" "Process exited" ""
+      printf "\033[2A\033[2K\r  %-14s  [%-${bar_width}s] FAILED\n\033[2K\r" "Process exited" ""
       echo "───────────────────────────────────────────────────────────"
       echo "  The server process exited unexpectedly."
       echo "  Check logs: ./valheim-server-manager.sh logs"
@@ -123,27 +126,38 @@ start() {
       step=$(( step + 1 ))
     done
 
-    # Render bar
+    # Bar geometry
     local pct=$(( step * 100 / total ))
     local filled=$(( step * bar_width / total ))
     local bar=""
-    for (( i=0; i<filled; i++ ));           do bar+="█"; done
-    for (( i=filled; i<bar_width; i++ ));   do bar+="░"; done
+    for (( i=0; i<filled; i++ ));         do bar+="█"; done
+    for (( i=filled; i<bar_width; i++ )); do bar+="░"; done
+
+    # Label shows what was last confirmed (step-1), not what we're waiting for
+    local label
+    [[ $step -eq 0 ]] && label="Starting...   " || label="${ms_labels[$((step-1))]}"
+
+    # Latest log line — strip Valheim timestamp prefix (MM/DD/YYYY HH:MM:SS: )
+    local last_log
+    last_log=$(tail -1 "${LOGFILE}" 2>/dev/null \
+      | sed 's|^[0-9][0-9]/[0-9][0-9]/[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9]: ||' \
+      | cut -c1-55 || true)
 
     if [[ $step -eq $total ]]; then
-      printf "  %-14s  [%s] 100%%\n" "${ms_labels[$((step-1))]}" "${bar}"
+      printf "\033[2A\033[2K\r  %-14s  [%s] 100%%\n\033[2K\r" "${ms_labels[$((step-1))]}" "${bar}"
       break
     fi
 
     local spin="${spinners[$spin_idx]}"
-    printf "  %-14s  [%s] %3d%% %s\r" "${ms_labels[$step]}" "${bar}" "${pct}" "${spin}"
+    printf "\033[2A\033[2K\r  %-14s  [%s] %3d%% %s\n\033[2K  %.55s\n" \
+      "${label}" "${bar}" "${pct}" "${spin}" "${last_log}"
     spin_idx=$(( (spin_idx + 1) % ${#spinners[@]} ))
     sleep 1
     elapsed=$(( elapsed + 1 ))
   done
 
   if [[ $elapsed -ge $timeout ]]; then
-    printf "  %-14s  [%-${bar_width}s] TIMEOUT\n" "Timed out" ""
+    printf "\033[2A\033[2K\r  %-14s  [%-${bar_width}s] TIMEOUT\n\033[2K\r" "Timed out" ""
     echo "───────────────────────────────────────────────────────────"
     echo "  Server did not reach ready state within ${timeout}s."
     echo "  It may still be loading — check: ./valheim-server-manager.sh logs"
@@ -155,16 +169,29 @@ start() {
   echo "───────────────────────────────────────────────────────────"
   echo "  Status:      Started"
 
+  # API startup as a final animated bar step
   if [[ "${API_ENABLED,,}" == "true" ]]; then
-    printf "  %-12s " "API:"
-    local api_out
-    if api_out=$("${SCRIPT_DIR}/api-manager.sh" start 2>&1); then
-      echo "Started on ${API_HOST:-127.0.0.1}:${API_PORT:-8080}"
+    local api_tmp; api_tmp=$(mktemp)
+    "${SCRIPT_DIR}/api-manager.sh" start > "${api_tmp}" 2>&1 &
+    local api_bg=$!
+    local api_spin_idx=0
+    printf "  %-14s  [%-${bar_width}s]  -- |" "API           " ""
+    while kill -0 "${api_bg}" 2>/dev/null; do
+      printf "\r  %-14s  [%-${bar_width}s]  -- %s" "API           " "" "${spinners[$api_spin_idx]}"
+      api_spin_idx=$(( (api_spin_idx + 1) % ${#spinners[@]} ))
+      sleep 1
+    done
+    wait "${api_bg}"
+    local api_exit=$?
+    if [[ $api_exit -eq 0 ]]; then
+      printf "\r\033[2K  %-14s  [%s] 100%%\n" "API           " "${bar_full}"
     else
-      local last_err; last_err=$(echo "${api_out}" | grep -i "error\|not found" | tail -1)
-      echo "Failed to start${last_err:+ — ${last_err}}"
+      local last_err; last_err=$(grep -i "error\|not found" "${api_tmp}" | tail -1)
+      printf "\r\033[2K  %-14s  [%-${bar_width}s] FAILED\n" "API           " ""
+      [[ -n "${last_err}" ]] && echo "  ${last_err}"
       echo "  Diagnose: ./api-manager.sh setup && ./api-manager.sh start"
     fi
+    rm -f "${api_tmp}"
   fi
 
   echo "═══════════════════════════════════════════════════════════"
