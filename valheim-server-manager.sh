@@ -161,7 +161,7 @@ start() {
     fi
 
     local spin="${spinners[$spin_idx]}"
-    printf "\033[4A\033[2K\r  %-14s  [%s] %3d%% %s\n\033[2K  %.55s\n\033[2K  %.55s\n\033[2K  %.55s\n" \
+    printf "\033[4A\033[2K\r  %-14s  [%s] %3d%% %s\n\033[2K  │ %.51s\n\033[2K  │ %.51s\n\033[2K  │ %.51s\n" \
       "${label}" "${bar}" "${pct}" "${spin}" \
       "${log_lines[0]}" "${log_lines[1]}" "${log_lines[2]}"
     spin_idx=$(( (spin_idx + 1) % ${#spinners[@]} ))
