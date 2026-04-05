@@ -109,6 +109,7 @@ cmd_start() {
         mv -f "${log_file}"   "${log_file}.1" 2>/dev/null || true
     fi
 
+    touch "${log_file}" && chmod 600 "${log_file}"
     echo "Starting API on ${API_HOST}:${API_PORT} ..."
     nohup "${uvicorn}" api.main:app \
         --host "${API_HOST}" \

@@ -2,7 +2,7 @@
 # Valheim Server Backup Automation Script
 # This script can be run manually or scheduled via cron or systemd
 
-set -eo pipefail
+set -euo pipefail
 
 # Source the main configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

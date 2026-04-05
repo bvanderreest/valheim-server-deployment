@@ -2,7 +2,7 @@
 # Valheim Server Monitor
 # Standalone script for monitoring Valheim server player counts and status
 
-set -eo pipefail
+set -euo pipefail
 
 # Source configuration and helpers
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
