@@ -1,6 +1,6 @@
 # Sprint 003 — API Uplift Phase 2: Config Management
 
-**Status:** ACTIVE
+**Status:** IN REVIEW
 **Branch:** `feature/sprint-003-api-uplift-phase2`
 **Milestone:** Sprint 003 — API Uplift Phase 2: Config (Gitea Milestone #19)
 **Version Target:** v0.4.0
@@ -29,7 +29,7 @@ Implement Phase 2 of the API uplift — server configuration read and write via 
 | 8 | Unit tests — exclusion, masking, validation, out-of-range rejection | [ ] | #43 |
 | 9 | Integration tests — config round-trip, backup creation | [ ] | #43 |
 | 10 | Security tests — excluded key write rejection, no path leak in errors | [ ] | #43 |
-| 11 | `GET /metrics` — Prometheus text format, unauthenticated | [ ] | #26 |
+| 11 | `GET /metrics` — Prometheus text format, unauthenticated | [x] | #26 |
 
 ---
 

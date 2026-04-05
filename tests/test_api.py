@@ -382,3 +382,43 @@ class TestPatchConfig:
             assert r.status_code == 401
         finally:
             app.dependency_overrides[require_api_key] = _override_auth
+
+
+# ─── GET /metrics ─────────────────────────────────────────────────────────────
+
+class TestMetrics:
+    def test_returns_200_unauthenticated(self):
+        r = no_auth_client.get("/metrics")
+        assert r.status_code == 200
+
+    def test_content_type_is_plain_text(self):
+        r = client.get("/metrics")
+        assert "text/plain" in r.headers["content-type"]
+
+    def test_contains_required_metric_names(self):
+        r = client.get("/metrics")
+        body = r.text
+        for metric in (
+            "valheim_server_running",
+            "valheim_server_uptime_seconds",
+            "valheim_players_connected",
+            "valheim_backup_count",
+            "valheim_world_size_bytes",
+            "valheim_last_save_age_seconds",
+        ):
+            assert metric in body
+
+    def test_each_metric_has_help_and_type_lines(self):
+        r = client.get("/metrics")
+        body = r.text
+        assert "# HELP valheim_server_running" in body
+        assert "# TYPE valheim_server_running gauge" in body
+
+    def test_metric_values_are_numeric(self):
+        r = client.get("/metrics")
+        for line in r.text.splitlines():
+            if line.startswith("#") or not line.strip():
+                continue
+            parts = line.split()
+            assert len(parts) == 2, f"Expected 'name value', got: {line!r}"
+            float(parts[1])  # must be parseable as a number
