@@ -149,12 +149,28 @@ start() {
 
   echo "───────────────────────────────────────────────────────────"
   echo "  Status:      Started"
+
+  if [[ "${API_ENABLED,,}" == "true" ]]; then
+    printf "  %-12s " "API:"
+    if "${SCRIPT_DIR}/api-manager.sh" start >/dev/null 2>&1; then
+      echo "Started on ${API_HOST:-127.0.0.1}:${API_PORT:-8080}"
+    else
+      echo "Failed to start (check .api.log)"
+    fi
+  fi
+
   echo "═══════════════════════════════════════════════════════════"
   echo "  Use './valheim-server-manager.sh logs' to follow output."
   echo "═══════════════════════════════════════════════════════════"
 }
 
 stop() {
+  local api_pid_file="${SCRIPT_DIR}/.api.pid"
+  if [[ -f "${api_pid_file}" ]] && kill -0 "$(cat "${api_pid_file}")" 2>/dev/null; then
+    echo "[stop] Stopping API..."
+    "${SCRIPT_DIR}/api-manager.sh" stop
+  fi
+
   if ! is_running; then echo "Server is not running."; exit 0; fi
   local pid; pid="$(cat "${PIDFILE}")"
   echo "[stop] SIGINT ${pid} (graceful)…"; kill -SIGINT "${pid}" 2>/dev/null || true
@@ -230,6 +246,22 @@ stats() {
     local backup_count; backup_count="$(ls -1 "${BACKUP_DIR}"/world-"${WORLD_NAME}"-*.tar.gz 2>/dev/null | wc -l)"
     echo "  Backups:        ${backup_count} file(s)"
   }
+
+  printf "\n"
+  echo "API:"
+  local api_pid_file="${SCRIPT_DIR}/.api.pid"
+  if [[ "${API_ENABLED,,}" == "true" ]]; then
+    if [[ -f "${api_pid_file}" ]] && kill -0 "$(cat "${api_pid_file}")" 2>/dev/null; then
+      local api_pid; api_pid="$(cat "${api_pid_file}")"
+      echo "  Status:         RUNNING (PID ${api_pid})"
+      echo "  Address:        ${API_HOST:-127.0.0.1}:${API_PORT:-8080}"
+    else
+      echo "  Status:         STOPPED"
+      echo "  Address:        ${API_HOST:-127.0.0.1}:${API_PORT:-8080}"
+    fi
+  else
+    echo "  Status:         DISABLED (set API_ENABLED=true in .env to enable)"
+  fi
 
   printf "\n"
   echo "═══════════════════════════════════════════════════════"
@@ -502,6 +534,10 @@ usage() {
   echo "  backup     Archive world files to \$BACKUP_DIR"
   echo "  update     Pull the latest Valheim server build via SteamCMD"
   echo "  deploy     Install SteamCMD, dependencies, and server files"
+  echo ""
+  echo "  ── API Management ──────────────────────────────────────────"
+  echo "  (Requires API_ENABLED=true in .env; co-managed by start/stop)"
+  echo "  ./api-manager.sh [start|stop|restart|status|setup]"
   echo ""
   echo "  ── Examples ────────────────────────────────────────────────"
   echo "  sudo $0 deploy     # First-time install"
