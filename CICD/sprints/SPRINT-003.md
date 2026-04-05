@@ -1,11 +1,11 @@
 # Sprint 003 — API Uplift Phase 2: Config Management
 
-**Status:** IN REVIEW
+**Status:** CLOSED
 **Branch:** `feature/sprint-003-api-uplift-phase2`
 **Milestone:** Sprint 003 — API Uplift Phase 2: Config (Gitea Milestone #19)
 **Version Target:** v0.4.0
 **Started:** 2026-04-05
-**Closed:** —
+**Closed:** 2026-04-05
 
 ---
 
