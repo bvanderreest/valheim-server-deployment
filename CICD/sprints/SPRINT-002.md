@@ -1,11 +1,11 @@
 # Sprint 002 — API Uplift Phase 1: Reshaping + Capabilities
 
-**Status:** IN REVIEW
+**Status:** CLOSED
 **Branch:** `feature/sprint-002-api-uplift-phase1`
 **Milestone:** Sprint 002 — API Uplift Phase 1 (Gitea Milestone #18)
 **Version Target:** v0.3.0
 **Started:** 2026-03-30
-**Closed:** —
+**Closed:** 2026-04-05
 
 ---
 
