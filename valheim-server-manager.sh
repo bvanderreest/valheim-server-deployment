@@ -104,14 +104,14 @@ start() {
   local timeout=300
   local elapsed=0
 
-  # Two-line display: bar line + live log line below it.
-  # Subsequent ticks use ANSI cursor-up to redraw both lines in place.
-  printf "  Starting...     [%-${bar_width}s]   0%%\n  \n" ""
+  # Four-line display: bar line + 3 live log lines below it.
+  # Subsequent ticks use ANSI cursor-up to redraw all four lines in place.
+  printf "  Starting...     [%-${bar_width}s]   0%%\n  \n  \n  \n" ""
 
   while [[ $elapsed -lt $timeout ]]; do
     # Fail fast if the process died
     if ! kill -0 "${pid}" 2>/dev/null; then
-      printf "\033[2A\033[2K\r  %-14s  [%-${bar_width}s] FAILED\n\033[2K\r" "Process exited" ""
+      printf "\033[4A\033[2K\r  %-14s  [%-${bar_width}s] FAILED\n\033[2K\r\033[2K\r\033[2K\r" "Process exited" ""
       echo "───────────────────────────────────────────────────────────"
       echo "  The server process exited unexpectedly."
       echo "  Check logs: ./valheim-server-manager.sh logs"
@@ -137,10 +137,10 @@ start() {
     local label
     [[ $step -eq 0 ]] && label="Starting...   " || label="${ms_labels[$((step-1))]}"
 
-    # Latest meaningful log line — strip timestamp, filter known Unity/Steam noise.
+    # Latest 3 meaningful log lines — strip timestamp, filter known Unity/Steam noise.
     # grep -v removes lines that are purely internal chatter with no operator value.
-    local last_log
-    last_log=$(tail -200 "${LOGFILE}" 2>/dev/null | grep -v \
+    local log_lines
+    mapfile -t log_lines < <(tail -200 "${LOGFILE}" 2>/dev/null | grep -v \
       -e "Fallback handler could not load library" \
       -e "Unloading [0-9]* Unused" \
       -e "^\[Physics" \
@@ -149,25 +149,28 @@ start() {
       -e "^Mono " \
       -e "^Desktop is" \
       -e "^Using GLFW" \
-      | tail -1 \
+      | tail -3 \
       | sed 's|^[0-9][0-9]/[0-9][0-9]/[0-9]* [0-9][0-9]:[0-9][0-9]:[0-9][0-9]: ||' \
       | cut -c1-55 || true)
+    # Pad to exactly 3 entries so printf always has values
+    while [[ ${#log_lines[@]} -lt 3 ]]; do log_lines+=(""); done
 
     if [[ $step -eq $total ]]; then
-      printf "\033[2A\033[2K\r  %-14s  [%s] 100%%\n\033[2K\r" "${ms_labels[$((step-1))]}" "${bar}"
+      printf "\033[4A\033[2K\r  %-14s  [%s] 100%%\n\033[2K\r\033[2K\r\033[2K\r" "${ms_labels[$((step-1))]}" "${bar}"
       break
     fi
 
     local spin="${spinners[$spin_idx]}"
-    printf "\033[2A\033[2K\r  %-14s  [%s] %3d%% %s\n\033[2K  %.55s\n" \
-      "${label}" "${bar}" "${pct}" "${spin}" "${last_log}"
+    printf "\033[4A\033[2K\r  %-14s  [%s] %3d%% %s\n\033[2K  %.55s\n\033[2K  %.55s\n\033[2K  %.55s\n" \
+      "${label}" "${bar}" "${pct}" "${spin}" \
+      "${log_lines[0]}" "${log_lines[1]}" "${log_lines[2]}"
     spin_idx=$(( (spin_idx + 1) % ${#spinners[@]} ))
     sleep 1
     elapsed=$(( elapsed + 1 ))
   done
 
   if [[ $elapsed -ge $timeout ]]; then
-    printf "\033[2A\033[2K\r  %-14s  [%-${bar_width}s] TIMEOUT\n\033[2K\r" "Timed out" ""
+    printf "\033[4A\033[2K\r  %-14s  [%-${bar_width}s] TIMEOUT\n\033[2K\r\033[2K\r\033[2K\r" "Timed out" ""
     echo "───────────────────────────────────────────────────────────"
     echo "  Server did not reach ready state within ${timeout}s."
     echo "  It may still be loading — check: ./valheim-server-manager.sh logs"
