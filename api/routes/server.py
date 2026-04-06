@@ -269,7 +269,7 @@ async def get_capabilities() -> dict:
         "capabilities": {
             "control": list(_VALID_ACTIONS),
             "config": True,
-            "mods": False,
+            "mods": True,
             "log_stream": True,
         },
     }

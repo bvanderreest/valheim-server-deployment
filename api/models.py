@@ -80,3 +80,40 @@ class ConfigUpdateRequest(BaseModel):
 class ConfigUpdateResponse(BaseModel):
     applied: dict[str, str]
     restart_required: bool
+
+
+class ModInfo(BaseModel):
+    package_id: str
+    name: str
+    version: str
+    enabled: bool
+    description: Optional[str] = None
+    website_url: Optional[str] = None
+    installed_at: str
+    source: Optional[str] = None
+
+
+class ModsResponse(BaseModel):
+    mods: list[ModInfo]
+    count: int
+    mod_dir: str
+
+
+class ModInstallRequest(BaseModel):
+    source_url: str
+    package_id: Optional[str] = None  # auto-derived from URL if omitted
+
+
+class ModInstallResponse(BaseModel):
+    package_id: str
+    name: str
+    version: str
+    installed: bool
+    message: str
+
+
+class ModActionResponse(BaseModel):
+    package_id: str
+    action: str  # "enabled" | "disabled" | "deleted"
+    success: bool
+    message: str

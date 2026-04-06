@@ -70,6 +70,31 @@ class Settings(BaseSettings):
     def manager_script(self) -> Path:
         return self.script_dir / "valheim-server-manager.sh"
 
+    # Mod management — optional overrides; derived from script_dir/server/BepInEx/ by default
+    mod_dir_override: Optional[Path] = None
+    mod_disabled_dir_override: Optional[Path] = None
+    mod_trash_dir_override: Optional[Path] = None
+    # Comma-separated hostnames allowed as mod download sources
+    mod_allowed_sources: str = "thunderstore.io,gcdn.thunderstore.io"
+    # Maximum archive size in megabytes accepted by POST /mods/install
+    mod_max_size_mb: int = 100
+
+    @property
+    def mod_dir(self) -> Path:
+        return self.mod_dir_override or (self.script_dir / "server" / "BepInEx" / "plugins")
+
+    @property
+    def mod_disabled_dir(self) -> Path:
+        return self.mod_disabled_dir_override or (self.script_dir / "server" / "BepInEx" / "plugins_disabled")
+
+    @property
+    def mod_trash_dir(self) -> Path:
+        return self.mod_trash_dir_override or (self.script_dir / "server" / "BepInEx" / "plugins_trash")
+
+    @property
+    def mod_allowed_sources_list(self) -> list[str]:
+        return [s.strip() for s in self.mod_allowed_sources.split(",") if s.strip()]
+
     model_config = {
         "env_file": Path(__file__).parent.parent / ".env",
         "env_file_encoding": "utf-8",

@@ -239,7 +239,7 @@ class TestCapabilities:
         assert "server_type" in data
         caps = data["capabilities"]
         assert caps["config"] is True
-        assert caps["mods"] is False
+        assert caps["mods"] is True
         assert caps["log_stream"] is True
         assert "start" in caps["control"]
 
@@ -422,3 +422,267 @@ class TestMetrics:
             parts = line.split()
             assert len(parts) == 2, f"Expected 'name value', got: {line!r}"
             float(parts[1])  # must be parseable as a number
+
+
+# ─── Mod helpers ──────────────────────────────────────────────────────────────
+
+import io
+import json as _json
+import zipfile as _zipfile
+
+
+def _make_mod_settings(tmp_path):
+    """Return a mock settings object with mod dirs pointing into tmp_path."""
+    m = MagicMock()
+    m.mod_dir = tmp_path / "plugins"
+    m.mod_disabled_dir = tmp_path / "plugins_disabled"
+    m.mod_trash_dir = tmp_path / "plugins_trash"
+    m.mod_allowed_sources_list = ["thunderstore.io", "gcdn.thunderstore.io"]
+    m.mod_max_size_mb = 100
+    return m
+
+
+def _make_zip(manifest: dict | None = None) -> bytes:
+    """Create an in-memory ZIP with an optional manifest.json."""
+    buf = io.BytesIO()
+    with _zipfile.ZipFile(buf, "w") as zf:
+        if manifest is not None:
+            zf.writestr("manifest.json", _json.dumps(manifest))
+        zf.writestr("BepInEx/plugins/Example.dll", b"fake dll")
+    return buf.getvalue()
+
+
+def _write_mod(plugins_dir, package_id: str, manifest: dict | None = None, inv_entry: dict | None = None):
+    """Create a fake installed mod directory."""
+    mod_dir = plugins_dir / package_id
+    mod_dir.mkdir(parents=True, exist_ok=True)
+    if manifest:
+        (mod_dir / "manifest.json").write_text(_json.dumps(manifest))
+    if inv_entry:
+        inv_file = plugins_dir / "mods.json"
+        inventory = _json.loads(inv_file.read_text()) if inv_file.exists() else {}
+        inventory[package_id] = inv_entry
+        inv_file.write_text(_json.dumps(inventory))
+
+
+# ─── GET /mods ────────────────────────────────────────────────────────────────
+
+class TestGetMods:
+    def test_returns_empty_when_no_mods(self, tmp_path):
+        with patch("api.routes.mods.settings", _make_mod_settings(tmp_path)):
+            r = client.get("/mods", headers=HEADERS)
+        assert r.status_code == 200
+        body = r.json()
+        assert body["mods"] == []
+        assert body["count"] == 0
+
+    def test_lists_enabled_mod(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        _write_mod(s.mod_dir, "BepInEx_pack", manifest={"name": "BepInEx Pack", "version_number": "5.4.2100"})
+        with patch("api.routes.mods.settings", s):
+            r = client.get("/mods", headers=HEADERS)
+        assert r.status_code == 200
+        mods = r.json()["mods"]
+        assert len(mods) == 1
+        assert mods[0]["package_id"] == "BepInEx_pack"
+        assert mods[0]["name"] == "BepInEx Pack"
+        assert mods[0]["enabled"] is True
+
+    def test_lists_disabled_mod(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        _write_mod(s.mod_disabled_dir, "some_mod", manifest={"name": "Some Mod", "version_number": "1.0.0"})
+        with patch("api.routes.mods.settings", s):
+            r = client.get("/mods", headers=HEADERS)
+        mods = r.json()["mods"]
+        assert len(mods) == 1
+        assert mods[0]["enabled"] is False
+
+    def test_requires_auth(self):
+        app.dependency_overrides.clear()
+        try:
+            r = no_auth_client.get("/mods")
+            assert r.status_code == 401
+        finally:
+            app.dependency_overrides[require_api_key] = _override_auth
+
+
+# ─── POST /mods/install ───────────────────────────────────────────────────────
+
+class TestInstallMod:
+    def test_rejects_disallowed_source(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        with patch("api.routes.mods.settings", s):
+            r = client.post(
+                "/mods/install",
+                json={"source_url": "https://evil.example.com/mod.zip"},
+                headers=HEADERS,
+            )
+        assert r.status_code == 400
+        assert "not allowed" in r.json()["detail"].lower()
+
+    def test_rejects_invalid_package_id(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        with patch("api.routes.mods.settings", s):
+            r = client.post(
+                "/mods/install",
+                json={"source_url": "https://thunderstore.io/mod.zip", "package_id": "../evil"},
+                headers=HEADERS,
+            )
+        assert r.status_code == 400
+
+    def test_rejects_oversized_archive(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        s.mod_max_size_mb = 1  # 1 MB limit for test
+        zip_bytes = _make_zip({"name": "Big Mod", "version_number": "1.0.0"})
+
+        mock_resp = MagicMock()
+        mock_resp.raise_for_status = MagicMock()
+        mock_resp.headers = {"content-length": str(2 * 1024 * 1024)}  # 2 MB
+        mock_resp.__enter__ = lambda s: s
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = lambda s: s
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.stream.return_value = mock_resp
+
+        with patch("api.routes.mods.settings", s), \
+             patch("api.services.mods.httpx.Client", return_value=mock_client):
+            r = client.post(
+                "/mods/install",
+                json={"source_url": "https://thunderstore.io/mod.zip", "package_id": "big_mod"},
+                headers=HEADERS,
+            )
+        assert r.status_code == 400
+        assert "large" in r.json()["detail"].lower()
+
+    def test_rejects_zip_path_traversal(self, tmp_path):
+        """ZIP containing ../ paths must be rejected."""
+        buf = io.BytesIO()
+        with _zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("../evil.sh", "rm -rf /")
+        bad_zip = buf.getvalue()
+
+        s = _make_mod_settings(tmp_path)
+        with patch("api.routes.mods.settings", s), \
+             patch("api.services.mods.install_mod", side_effect=ValueError("Unsafe path in archive: '../evil.sh'")):
+            r = client.post(
+                "/mods/install",
+                json={"source_url": "https://thunderstore.io/mod.zip", "package_id": "evil_mod"},
+                headers=HEADERS,
+            )
+        assert r.status_code == 400
+        assert "unsafe" in r.json()["detail"].lower()
+
+    def test_successful_install(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        from api.models import ModInfo
+        from datetime import datetime, timezone
+        mock_mod = ModInfo(
+            package_id="BepInEx_pack",
+            name="BepInEx Pack",
+            version="5.4.2100",
+            enabled=True,
+            installed_at=datetime.now(timezone.utc).isoformat(),
+            source="https://thunderstore.io/BepInEx_pack.zip",
+        )
+        with patch("api.routes.mods.settings", s), \
+             patch("api.services.mods.install_mod", return_value=mock_mod):
+            r = client.post(
+                "/mods/install",
+                json={"source_url": "https://thunderstore.io/BepInEx_pack.zip", "package_id": "BepInEx_pack"},
+                headers=HEADERS,
+            )
+        assert r.status_code == 201
+        body = r.json()
+        assert body["package_id"] == "BepInEx_pack"
+        assert body["installed"] is True
+
+
+# ─── DELETE /mods/{package_id} ────────────────────────────────────────────────
+
+class TestDeleteMod:
+    def test_rejects_invalid_package_id(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        with patch("api.routes.mods.settings", s):
+            r = client.delete("/mods/../evil", headers=HEADERS)
+        # FastAPI path routing won't even match this, but if it does, expect 400 or 404
+        assert r.status_code in (400, 404, 422)
+
+    def test_returns_404_for_unknown_mod(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        with patch("api.routes.mods.settings", s):
+            r = client.delete("/mods/nonexistent_mod", headers=HEADERS)
+        assert r.status_code == 404
+
+    def test_moves_to_trash(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        _write_mod(s.mod_dir, "my_mod", manifest={"name": "My Mod", "version_number": "1.0.0"})
+        with patch("api.routes.mods.settings", s):
+            r = client.delete("/mods/my_mod", headers=HEADERS)
+        assert r.status_code == 200
+        assert r.json()["action"] == "deleted"
+        assert not (s.mod_dir / "my_mod").exists()
+        # Verify something is in trash
+        trash_entries = list(s.mod_trash_dir.iterdir())
+        assert len(trash_entries) == 1
+        assert trash_entries[0].name.startswith("my_mod_")
+
+
+# ─── POST /mods/{package_id}/enable and /disable ─────────────────────────────
+
+class TestEnableDisableMod:
+    def test_enable_moves_from_disabled_to_enabled(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        _write_mod(s.mod_disabled_dir, "some_mod", manifest={"name": "Some Mod", "version_number": "1.0.0"})
+        with patch("api.routes.mods.settings", s):
+            r = client.post("/mods/some_mod/enable", headers=HEADERS)
+        assert r.status_code == 200
+        assert r.json()["action"] == "enabled"
+        assert (s.mod_dir / "some_mod").exists()
+        assert not (s.mod_disabled_dir / "some_mod").exists()
+
+    def test_enable_404_if_not_found(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        with patch("api.routes.mods.settings", s):
+            r = client.post("/mods/ghost_mod/enable", headers=HEADERS)
+        assert r.status_code == 404
+
+    def test_enable_400_if_already_enabled(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        _write_mod(s.mod_dir, "active_mod")
+        with patch("api.routes.mods.settings", s):
+            r = client.post("/mods/active_mod/enable", headers=HEADERS)
+        assert r.status_code == 400
+
+    def test_disable_moves_from_enabled_to_disabled(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        _write_mod(s.mod_dir, "some_mod", manifest={"name": "Some Mod", "version_number": "1.0.0"})
+        with patch("api.routes.mods.settings", s):
+            r = client.post("/mods/some_mod/disable", headers=HEADERS)
+        assert r.status_code == 200
+        assert r.json()["action"] == "disabled"
+        assert (s.mod_disabled_dir / "some_mod").exists()
+        assert not (s.mod_dir / "some_mod").exists()
+
+    def test_disable_404_if_not_found(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        with patch("api.routes.mods.settings", s):
+            r = client.post("/mods/ghost_mod/disable", headers=HEADERS)
+        assert r.status_code == 404
+
+    def test_disable_400_if_already_disabled(self, tmp_path):
+        s = _make_mod_settings(tmp_path)
+        _write_mod(s.mod_disabled_dir, "inactive_mod")
+        with patch("api.routes.mods.settings", s):
+            r = client.post("/mods/inactive_mod/disable", headers=HEADERS)
+        assert r.status_code == 400
+
+
+# ─── GET /capabilities — mods: true ──────────────────────────────────────────
+
+class TestCapabilitiesMods:
+    def test_mods_capability_is_true(self):
+        r = client.get("/capabilities", headers=HEADERS)
+        assert r.status_code == 200
+        assert r.json()["capabilities"]["mods"] is True
