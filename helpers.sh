@@ -331,18 +331,19 @@ get_server_ip() {
 # any of those strings may change (one already did — "DungeonDB done" never
 # fires). These check the things that are true regardless of log wording.
 
-# True when the Valheim UDP game port is actually bound by our process.
-# This is the authoritative "the server is up" signal.
+# True when the server has bound its UDP sockets.
+#
+# Valheim uses PORT and PORT+1. VERIFIED ON THE LIVE SERVER 2026-09-08: with
+# -crossplay the game traffic relays through PlayFab and only the query port
+# (PORT+1, 2457) is bound locally — 2456 never appears in `ss`. Checking only
+# PORT would therefore be a test that can never pass, so accept either.
 server_port_bound() {
   local pid="${1:-}"
   [[ -n "${pid}" ]] || return 1
-  # ss is in iproute2 and always present on Ubuntu; fall back to /proc if not.
-  if command -v ss >/dev/null 2>&1; then
-    ss -lunp 2>/dev/null | grep -q ":${PORT}\b.*pid=${pid}\b" && return 0
-    # Some ss builds omit pid without root — fall back to "port is bound at all"
-    ss -lun 2>/dev/null | grep -q ":${PORT}\b" && return 0
-  fi
-  return 1
+  command -v ss >/dev/null 2>&1 || return 1
+  local qport=$(( PORT + 1 ))
+  local socks; socks="$(ss -lun 2>/dev/null)" || return 1
+  grep -qE "[:.]($PORT|$qport)\b" <<< "${socks}"
 }
 
 # Size of the log file, for detecting whether startup is still progressing.
