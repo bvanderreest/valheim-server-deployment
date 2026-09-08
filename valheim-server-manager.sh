@@ -101,8 +101,13 @@ start() {
   local step=0
   local spin_idx=0
   local spinners=('|' '/' '-' '\')
-  local timeout=300
+  # Configurable: a 1.0 world migration on a large world can far exceed the
+  # old hard-coded 300s. Default is generous on purpose (#71).
+  local timeout="${START_TIMEOUT:-900}"
   local elapsed=0
+  local ready=0
+  local last_log_size; last_log_size="$(log_size)"
+  local stalled_for=0
 
   # Four-line display: bar line + 3 live log lines below it.
   # Subsequent ticks use ANSI cursor-up to redraw all four lines in place.
@@ -155,9 +160,30 @@ start() {
     # Pad to exactly 3 entries so printf always has values
     while [[ ${#log_lines[@]} -lt 3 ]]; do log_lines+=(""); done
 
+    # AUTHORITATIVE readiness: the game port is bound by our PID. Log strings
+    # are only a progress hint — 1.0 is a Unity 6 rebuild and any of them may
+    # change, which must never turn a healthy server into a reported failure.
+    if server_port_bound "${pid}"; then
+      ready=1
+      local rlabel="Ready         "
+      [[ $step -gt 0 ]] && rlabel="${ms_labels[$((step-1))]}"
+      printf "\033[4A\033[2K\r  %-14s  [%s] 100%%\n\033[2K\r\033[2K\r\033[2K\r" "${rlabel}" "${bar_full}"
+      break
+    fi
+
     if [[ $step -eq $total ]]; then
       printf "\033[4A\033[2K\r  %-14s  [%s] 100%%\n\033[2K\r\033[2K\r\033[2K\r" "${ms_labels[$((step-1))]}" "${bar}"
+      ready=1
       break
+    fi
+
+    # Track whether the log is still advancing — used to tell "slow" from "hung".
+    local cur_log_size; cur_log_size="$(log_size)"
+    if [[ "${cur_log_size}" == "${last_log_size}" ]]; then
+      stalled_for=$(( stalled_for + 1 ))
+    else
+      stalled_for=0
+      last_log_size="${cur_log_size}"
     fi
 
     local spin="${spinners[$spin_idx]}"
@@ -169,13 +195,38 @@ start() {
     elapsed=$(( elapsed + 1 ))
   done
 
-  if [[ $elapsed -ge $timeout ]]; then
-    printf "\033[4A\033[2K\r  %-14s  [%-${bar_width}s] TIMEOUT\n\033[2K\r\033[2K\r\033[2K\r" "Timed out" ""
+  if [[ ${ready} -ne 1 ]]; then
+    # The old code called this FAILED and exited 1. That is wrong and dangerous:
+    # the first boot after a major patch migrates the world in place, which on a
+    # large world can take a very long time. Reporting failure invites the
+    # operator to restart mid-migration — a reliable way to corrupt a world.
+    if kill -0 "${pid}" 2>/dev/null; then
+      printf "\033[4A\033[2K\r  %-14s  [%-${bar_width}s] STILL WORKING\n\033[2K\r\033[2K\r\033[2K\r" "In progress" ""
+      echo "───────────────────────────────────────────────────────────"
+      echo "  Server is STILL RUNNING and has not finished starting."
+      if world_migration_in_progress; then
+        echo "  A world upgrade/migration appears to be in progress."
+      fi
+      if [[ ${stalled_for} -ge 120 ]]; then
+        echo "  ⚠ The log has not advanced for ${stalled_for}s — it may be stuck."
+      else
+        echo "  The log is still advancing, so it is working, just slow."
+      fi
+      echo ""
+      echo "  ⚠ DO NOT restart or stop it now — interrupting a world migration"
+      echo "    is one of the most reliable ways to corrupt a Valheim world."
+      echo ""
+      echo "  Watch it:  ./valheim-server-manager.sh logs"
+      echo "  PID ${pid} is alive. Waited ${timeout}s (raise START_TIMEOUT to wait longer)."
+      echo "═══════════════════════════════════════════════════════════"
+      exit 0
+    fi
+    printf "\033[4A\033[2K\r  %-14s  [%-${bar_width}s] FAILED\n\033[2K\r\033[2K\r\033[2K\r" "Process gone" ""
     echo "───────────────────────────────────────────────────────────"
-    echo "  Server did not reach ready state within ${timeout}s."
-    echo "  It may still be loading — check: ./valheim-server-manager.sh logs"
-    echo "  To stop and retry: ./valheim-server-manager.sh stop"
+    echo "  The server process is no longer running."
+    echo "  Check logs: ./valheim-server-manager.sh logs"
     echo "═══════════════════════════════════════════════════════════"
+    rm -f "${PIDFILE}"
     exit 1
   fi
 
@@ -340,73 +391,186 @@ check_steam_connectivity() {
   return 0
 }
 
-update() {
+# Read the installed build id from the Steam app manifest.
+installed_buildid() {
+  local acf="${SERVER_DIR}/steamapps/appmanifest_896660.acf"
+  [[ -f "${acf}" ]] || { echo "unknown"; return; }
+  grep -oE '"buildid"[[:space:]]+"[0-9]+"' "${acf}" | grep -oE '[0-9]+' | head -1 || echo "unknown"
+}
+
+# Shared implementation for `update` and `rollback`.
+# $1 = optional Steam beta branch (empty for the public branch)
+_do_steam_update() {
+  local branch="${1:-}"
+  local start_after="${2:-auto}"
+
   if [[ "${USE_STEAMCMD_UPDATE}" != "true" ]]; then echo "SteamCMD update disabled."; return 0; fi
   if [[ ! -x "${STEAMCMD_BIN}" ]]; then
     echo "Error: SteamCMD not found at ${STEAMCMD_BIN}"
     echo "  Fix: sudo ./valheim-server-manager.sh deploy"
     exit 1
   fi
-  is_running && { echo "[update] Stopping…"; stop; }
 
-  # Remove stale Steam lock files that cause "didn't shutdown cleanly" timeouts
+  local was_running=0
+  if is_running; then was_running=1; echo "[update] Stopping…"; stop; fi
+
+  # Free space: a major-version depot is a full re-download, and SteamCMD
+  # stages before committing. Refuse rather than fill the disk mid-write.
+  local avail_kb; avail_kb="$(df -Pk "${SERVER_DIR}" | awk 'NR==2{print $4}')"
+  local need_kb=$(( 6 * 1024 * 1024 ))     # 6 GiB headroom
+  if [[ "${avail_kb}" -lt "${need_kb}" ]]; then
+    echo "[update] ERROR: only $(( avail_kb / 1024 ))MB free on ${SERVER_DIR}; want $(( need_kb / 1024 ))MB." >&2
+    exit 1
+  fi
+
+  # BACKUP FIRST — non-negotiable. A Valheim world-format migration is one-way,
+  # so an update without a verified backup has no way back (#74).
+  echo "[update] Taking a pre-update backup…"
+  if ! backup; then
+    echo "[update] ABORTING: pre-update backup failed. Not touching the install." >&2
+    exit 1
+  fi
+
   rm -f "${HOME}/.steam/steam.pid" "${HOME}/.local/share/Steam/steam.pid" 2>/dev/null
 
   check_steam_connectivity || exit 1
 
-  # Verify the server directory is writable before invoking SteamCMD
   if [[ ! -w "${SERVER_DIR}" ]]; then
     echo "[update] Error: ${SERVER_DIR} is not writable by $(whoami)."
     echo "[update] Fix with: sudo chown -R $(whoami) \"${SERVER_DIR}\""
     exit 1
   fi
 
+  local before; before="$(installed_buildid)"
+  echo "[update] Installed build before: ${before}"
+
+  local -a steam_args=( +force_install_dir "${SERVER_DIR}" +login "${STEAM_LOGIN}" +app_update 896660 )
+  if [[ -n "${branch}" ]]; then
+    echo "[update] Target branch: ${branch}"
+    steam_args+=( -beta "${branch}" )
+  fi
+  steam_args+=( validate +quit )
+
   echo "[update] Updating app 896660 to ${SERVER_DIR}…"
-  if ! "${STEAMCMD_BIN}" +force_install_dir "${SERVER_DIR}" +login "${STEAM_LOGIN}" +app_update 896660 validate +quit; then
-    echo "[update] Error: SteamCMD failed. Check your network and that ports TCP/UDP 27015-27030 and TCP 80/443 are open outbound."
+  if ! "${STEAMCMD_BIN}" "${steam_args[@]}"; then
+    echo "[update] Error: SteamCMD failed. Check network and that TCP 80/443 are open outbound." >&2
+    echo "[update] Your pre-update backup is in ${BACKUP_DIR}." >&2
     exit 1
   fi
-  echo "[update] Done."
+
+  local after; after="$(installed_buildid)"
+  echo "[update] Installed build after:  ${after}"
+  if [[ "${before}" == "${after}" ]]; then
+    echo "[update] NOTE: build id did not change — you were already on this build."
+  else
+    echo "[update] Build changed ${before} → ${after}."
+  fi
+
+  # Restart unless told not to. The old code left the server stopped, which
+  # silently took the server offline every time anyone ran an update (#74).
+  case "${start_after}" in
+    never) echo "[update] Done. Server left stopped (--no-start)." ;;
+    always) echo "[update] Starting server…"; start ;;
+    *)
+      if [[ "${was_running}" -eq 1 ]]; then
+        echo "[update] Restarting server (it was running before the update)…"
+        start
+      else
+        echo "[update] Done. Server was not running before the update, leaving it stopped."
+        echo "[update] Start it with: ./valheim-server-manager.sh start"
+      fi
+      ;;
+  esac
+}
+
+update() {
+  local start_after="auto"
+  case "${1:-}" in
+    --no-start) start_after="never" ;;
+    --start)    start_after="always" ;;
+  esac
+  _do_steam_update "" "${start_after}"
+}
+
+# Roll the server back to the last stable build before Valheim 1.0.
+# Verified against Steam app metadata for 896660:
+#   default_pre1_0  buildid=21981590  pwdrequired=0  "Last stable build before 1.0"
+# NOTE: a world already migrated to the 1.0 format will NOT load on this build.
+# Restore a pre-1.0 world backup as well, or the rollback is useless.
+rollback() {
+  local branch="${ROLLBACK_BRANCH:-default_pre1_0}"
+  echo "╔═══════════════════════════════════════════════════════════╗"
+  echo "║  ROLLBACK to pre-1.0 build (${branch})"
+  echo "╚═══════════════════════════════════════════════════════════╝"
+  echo "  ⚠ A world already opened by 1.0 will NOT load on this build."
+  echo "    You must also restore a PRE-UPDATE world backup from:"
+  echo "      ${BACKUP_DIR}"
+  echo "  ⚠ Every player must switch their client to the same branch."
+  echo ""
+  read -r -p "  Continue with rollback? (y/N): " reply
+  if [[ ! "${reply}" =~ ^[Yy]$ ]]; then echo "  Cancelled."; return 0; fi
+  _do_steam_update "${branch}" "${1:-auto}"
 }
 
 backup() {
-  echo "[backup] Creating backup for world: $WORLD_NAME"
+  echo "[backup] Creating backup for world: ${WORLD_NAME}"
 
-  # Valheim stores world files in a worlds_local subdirectory
   local world_dir="${SAVEDIR}/worlds_local"
+  mkdir -p "${BACKUP_DIR}"
 
-  # Validate backup directory exists
-  mkdir -p "$BACKUP_DIR"
-
-  # Check if world files exist
-  if [[ ! -f "$world_dir/$WORLD_NAME.db" ]] || [[ ! -f "$world_dir/$WORLD_NAME.fwl" ]]; then
-    echo "[backup] Warning: World files not found at ${world_dir}. This may be normal if world hasn't been created yet."
+  # LAYOUT-AGNOSTIC (#73). The old version hard-coded "<World>.db" and
+  # "<World>.fwl"; under the 1.0 chunked layout those may not exist, and the
+  # old code treated that as a WARNING and returned — so the backup timer kept
+  # reporting success while archiving nothing. A backup that cannot fail is
+  # not a backup.
+  if [[ ! -d "${world_dir}" ]]; then
+    echo "[backup] ERROR: world directory does not exist: ${world_dir}" >&2
+    return 1
+  fi
+  if ! world_has_data; then
+    echo "[backup] ERROR: no data found for world '${WORLD_NAME}' in ${world_dir}" >&2
+    echo "[backup] Refusing to write an empty backup." >&2
     return 1
   fi
 
-  # Create timestamped backup
+  local layout; layout="$(world_layout)"
   local ts; ts="$(date +"%Y-%m-%d_%H-%M-%S")"
   local out="${BACKUP_DIR}/world-${WORLD_NAME}-${ts}.tar.gz"
+  echo "[backup] Layout: ${layout}"
   echo "[backup] Creating ${out}…"
 
-  # Build the file list — always include the primary files; add .old files when present.
-  # Valheim writes .db.old/.fwl.old just before each autosave: they are always a
-  # consistent, closed-state snapshot of the previous save cycle.
-  local backup_files=("$WORLD_NAME.db" "$WORLD_NAME.fwl")
-  [[ -f "$world_dir/$WORLD_NAME.db.old"  ]] && backup_files+=("$WORLD_NAME.db.old")
-  [[ -f "$world_dir/$WORLD_NAME.fwl.old" ]] && backup_files+=("$WORLD_NAME.fwl.old")
+  # Archive the whole savedir: every world file in whatever layout, plus the
+  # access lists, which are needed to reconstitute a working server.
+  local items=("worlds_local")
+  for f in adminlist.txt bannedlist.txt permittedlist.txt; do
+    [[ -f "${SAVEDIR}/${f}" ]] && items+=("${f}")
+  done
 
-  # Perform backup synchronously
-  if tar -czf "$out" -C "$world_dir" "${backup_files[@]}"; then
-    echo "[backup] OK. Backup completed successfully."
-    
-    # Clean up old backups, keeping the most recent BACKUPS_KEEP
-    find "${BACKUP_DIR}" -maxdepth 1 -name "world-${WORLD_NAME}-*.tar.gz" \
-      | sort -r | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm --
-  else
-    echo "[backup] ERROR: Backup failed!"
+  if ! tar -czf "${out}" -C "${SAVEDIR}" "${items[@]}"; then
+    echo "[backup] ERROR: tar failed." >&2
+    rm -f "${out}"
     return 1
   fi
+
+  # VERIFY. Creating a file is not the same as having a backup.
+  if ! gzip -t "${out}" 2>/dev/null; then
+    echo "[backup] ERROR: archive failed integrity check — removing it." >&2
+    rm -f "${out}"
+    return 1
+  fi
+  if ! tar -tzf "${out}" 2>/dev/null | grep -q "${WORLD_NAME}"; then
+    echo "[backup] ERROR: archive contains no files for '${WORLD_NAME}' — removing it." >&2
+    rm -f "${out}"
+    return 1
+  fi
+
+  local size; size="$(du -h "${out}" | cut -f1)"
+  echo "[backup] OK — ${size}, integrity verified."
+
+  # Retention. Timestamp format sorts lexicographically = chronologically.
+  find "${BACKUP_DIR}" -maxdepth 1 -name "world-${WORLD_NAME}-*.tar.gz" \
+    | sort -r | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm --
+  return 0
 }
 
 deploy() {
@@ -549,6 +713,10 @@ deploy() {
     echo "[deploy] Installing systemd service and timer..."
     sed -e "s|__USER__|${owner}|g" \
         -e "s|__SCRIPT_DIR__|${SCRIPT_DIR}|g" \
+        -e "s|__PIDFILE__|${PIDFILE}|g" \
+        "${SCRIPT_DIR}/valheim-server.service" > /etc/systemd/system/valheim-server.service
+    sed -e "s|__USER__|${owner}|g" \
+        -e "s|__SCRIPT_DIR__|${SCRIPT_DIR}|g" \
         "${SCRIPT_DIR}/valheim-backup.service" > /etc/systemd/system/valheim-backup.service
     cp "${SCRIPT_DIR}/valheim-backup.timer" /etc/systemd/system/valheim-backup.timer
     sed -e "s|__USER__|${owner}|g" \
@@ -556,6 +724,8 @@ deploy() {
         "${SCRIPT_DIR}/api/valheim-api.service" > /etc/systemd/system/valheim-api.service
     systemctl daemon-reload
     echo "[deploy] Systemd units installed."
+    echo "[deploy]   Server       : sudo systemctl enable --now valheim-server"
+    echo "[deploy]                  (autostart on boot + restart on crash — #28)"
     echo "[deploy]   Backup timer : sudo systemctl enable --now valheim-backup.timer"
     echo "[deploy]   API (opt-in) : set API_ENABLED=true in .env first, then:"
     echo "[deploy]                  sudo systemctl enable --now valheim-api"
@@ -583,8 +753,11 @@ usage() {
   echo "  logs       Tail the live server log output"
   echo ""
   echo "  ── Maintenance ─────────────────────────────────────────────"
-  echo "  backup     Archive world files to \$BACKUP_DIR"
-  echo "  update     Pull the latest Valheim server build via SteamCMD"
+  echo "  backup     Archive the whole savedir to \$BACKUP_DIR (verified)"
+  echo "  update     Back up, pull the latest build via SteamCMD, restart"
+  echo "             --no-start  leave the server stopped afterwards"
+  echo "             --start     always start afterwards"
+  echo "  rollback   Revert to the last stable pre-1.0 build (default_pre1_0)"
   echo "  deploy     Install SteamCMD, dependencies, and server files"
   echo ""
   echo "  ── API Management ──────────────────────────────────────────"
@@ -595,7 +768,13 @@ usage() {
   echo "  sudo $0 deploy     # First-time install"
   echo "  $0 start           # Start the server"
   echo "  $0 stats           # Check status and storage"
-  echo "  $0 backup          # Manual world backup"
+  echo "  $0 backup          # Manual world backup (verified)"
+  echo "  $0 update          # Safe update: backup -> update -> restart"
+  echo "  $0 rollback        # Emergency: back to the pre-1.0 build"
+  echo ""
+  echo "  ── Env overrides ───────────────────────────────────────────"
+  echo "  START_TIMEOUT=1800 $0 start   # wait longer for a slow migration"
+  echo "  GUARD_WORLD=false  $0 start   # skip the world-restore guard"
   echo ""
 }
 
@@ -605,7 +784,8 @@ case "${1:-}" in
   restart) restart ;;
   stats) stats ;;
   logs) logs ;;
-  update) update ;;
+  update) update "${2:-}" ;;
+  rollback) rollback "${2:-}" ;;
   backup) backup ;;
   deploy) deploy ;;
   *) usage; exit 1 ;;

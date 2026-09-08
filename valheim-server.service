@@ -1,0 +1,39 @@
+[Unit]
+Description=Valheim Dedicated Server (Lowood-AU)
+Documentation=https://gittavern.vdrcloud.com.au/vdrGames/Valheim-Server-Deployment
+# Needs the network genuinely up: crossplay registers with PlayFab at boot.
+After=network-online.target
+Wants=network-online.target
+# Don't fight a genuinely broken install: give up after 3 tries in 10 min.
+# (These belong in [Unit] on systemd >= 229; in [Service] they are ignored.)
+StartLimitBurst=3
+StartLimitIntervalSec=600
+
+[Service]
+Type=forking
+User=__USER__
+WorkingDirectory=__SCRIPT_DIR__
+PIDFile=__PIDFILE__
+
+# The manager backgrounds the server and writes the PID file itself.
+ExecStart=__SCRIPT_DIR__/valheim-server-manager.sh start
+ExecStop=__SCRIPT_DIR__/valheim-server-manager.sh stop
+
+# A world migration after a major patch can take a very long time, and the
+# manager deliberately exits 0 while the server is still working (see #71).
+# Give systemd room rather than have it kill a migration in progress.
+TimeoutStartSec=1800
+# Valheim saves the world on SIGINT; never rush the shutdown.
+TimeoutStopSec=300
+KillSignal=SIGINT
+KillMode=mixed
+
+Restart=on-failure
+RestartSec=30
+
+# The game is latency-sensitive; give it a small scheduling edge.
+Nice=-5
+OOMScoreAdjust=-500
+
+[Install]
+WantedBy=multi-user.target
