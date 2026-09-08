@@ -86,17 +86,21 @@ preflight_check() {
   fi
 
   # Check server binary
-  if ldd "${BINARY}" 2>&1 | grep -q "not found"; then
+  local ldd_out
+  ldd_out="$(ldd "${BINARY}" 2>&1 || true)"
+  if grep -q "not found" <<< "${ldd_out}"; then
     echo "[preflight] WARNING: Missing libraries for ${BINARY}:" >&2
-    ldd "${BINARY}" 2>&1 | grep "not found" >&2
+    grep "not found" <<< "${ldd_out}" >&2
     failed=1
   fi
 
   # Check plugin .so files (linux64/ Steam runtime plugins)
   while IFS= read -r -d '' sofile; do
-    if ldd "${sofile}" 2>&1 | grep -q "not found"; then
+    local so_out
+    so_out="$(ldd "${sofile}" 2>&1 || true)"
+    if grep -q "not found" <<< "${so_out}"; then
       echo "[preflight] WARNING: Missing libraries for ${sofile}:" >&2
-      ldd "${sofile}" 2>&1 | grep "not found" >&2
+      grep "not found" <<< "${so_out}" >&2
       failed=1
     fi
   done < <(find "${SERVER_DIR}/linux64" -maxdepth 1 -name "*.so" -print0 2>/dev/null)
@@ -107,9 +111,15 @@ preflight_check() {
   if [[ "${CROSSPLAY}" == "true" ]]; then
     echo "[preflight] Checking crossplay library dependencies..."
     local crossplay_missing=()
-    ldconfig -p 2>/dev/null | grep -q "libatomic.so"              || crossplay_missing+=("libatomic1")
-    ldconfig -p 2>/dev/null | grep -q "libpulse.so"               || crossplay_missing+=("libpulse0")
-    ldconfig -p 2>/dev/null | grep -q "libpulse-mainloop-glib.so" || crossplay_missing+=("libpulse-mainloop-glib0")
+    # Capture ldconfig ONCE, then match against the variable. Piping into
+    # `grep -q` fails under `set -o pipefail`: grep exits on the first match,
+    # ldconfig dies of SIGPIPE, and the pipeline reports failure — so a library
+    # that IS present is reported MISSING. That false positive took the server
+    # down during the 2026-09-08 update rehearsal.
+    local ldc; ldc="$(ldconfig -p 2>/dev/null || true)"
+    grep -q "libatomic.so"              <<< "${ldc}" || crossplay_missing+=("libatomic1")
+    grep -q "libpulse.so"               <<< "${ldc}" || crossplay_missing+=("libpulse0")
+    grep -q "libpulse-mainloop-glib.so" <<< "${ldc}" || crossplay_missing+=("libpulse-mainloop-glib0")
     if [[ ${#crossplay_missing[@]} -gt 0 ]]; then
       echo "[preflight] WARNING: Missing crossplay libraries: ${crossplay_missing[*]}" >&2
       echo "[preflight] Fix with: sudo apt install -y ${crossplay_missing[*]} libpulse-dev" >&2
@@ -120,9 +130,13 @@ preflight_check() {
   if [[ $failed -eq 0 ]]; then
     echo "[preflight] All library checks passed."
   else
-    echo "[preflight] Some libraries are missing. Server may fail to start." >&2
-    return 1
+    echo "[preflight] WARNING: some libraries look missing — starting anyway." >&2
+    echo "[preflight] This check is ADVISORY. It has produced false positives," >&2
+    echo "[preflight] and refusing to start on a heuristic is worse than trying:" >&2
+    echo "[preflight] if the libraries really are missing the process exits" >&2
+    echo "[preflight] immediately and start() reports that directly." >&2
   fi
+  return 0
 }
 
 is_running() { [[ -f "${PIDFILE}" ]] && kill -0 "$(cat "${PIDFILE}")" 2>/dev/null; }
@@ -366,8 +380,8 @@ log_size() { stat -c %s "${LOGFILE}" 2>/dev/null || echo 0; }
 # True when the log mentions an in-progress world upgrade/migration. Matched
 # loosely because the 1.0 wording is unknown.
 world_migration_in_progress() {
-  tail -n 50 "${LOGFILE}" 2>/dev/null \
-    | grep -qiE "upgrad|migrat|convert|chunk|rebuild.*world|world.*rebuild"
+  local recent; recent="$(tail -n 50 "${LOGFILE}" 2>/dev/null || true)"
+  grep -qiE "upgrad|migrat|convert|chunk|rebuild.*world|world.*rebuild" <<< "${recent}"
 }
 
 # Escape a string for safe embedding inside a JSON double-quoted value.
