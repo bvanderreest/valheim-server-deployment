@@ -297,8 +297,16 @@ get_connected_player_names() {
 
 get_join_code() {
   if ! is_running; then echo ""; return; fi
-  local log; log="$(tail -n 200 "${LOGFILE}" 2>/dev/null || echo "")"
-  echo "$log" | grep -oE "Join code: [0-9a-zA-Z]{4,16}" | tail -1 | awk '{print $3}' || echo ""
+  # VERIFIED against the live server 2026-09-08. Valheim does NOT log
+  # "Join code: NNNNNN". The real lines are:
+  #   Session "Lowood-AU" registered with join code 366974
+  #   Session "Lowood-AU" with join code 366974 and IP ... is active
+  # The old "Join code: " pattern matched neither, so the join code was
+  # never surfaced — /status reported null and crossplay players had no
+  # way to get it from the tooling. Scan the whole log, newest wins,
+  # because the code is issued once at startup and reused thereafter.
+  grep -oiE "join code[: ]+[0-9a-zA-Z]{4,16}" "${LOGFILE}" 2>/dev/null \
+    | tail -1 | grep -oE "[0-9a-zA-Z]{4,16}$" || echo ""
 }
 
 get_valheim_version() {

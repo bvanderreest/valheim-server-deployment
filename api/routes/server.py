@@ -143,7 +143,12 @@ def _get_last_save() -> Optional[str]:
     if last is None:
         return None
     try:
-        dt = datetime.strptime(last, "%d/%m/%Y %H:%M:%S").replace(tzinfo=timezone.utc)
+        # Valheim logs US format MM/DD/YYYY. Proven by archived entries like
+        # "06/25/2026" — day 25 cannot be a month. Using %d/%m here silently
+        # mis-parsed dates for day <= 12 and returned None for day > 12
+        # (ValueError), so last_save was wrong or missing most of the month.
+        # metrics.py already had this right; the two disagreed.
+        dt = datetime.strptime(last, "%m/%d/%Y %H:%M:%S").replace(tzinfo=timezone.utc)
         return dt.isoformat().replace("+00:00", "Z")
     except ValueError:
         return None
