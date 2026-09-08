@@ -17,6 +17,7 @@ client = TestClient(app)
 HEADERS = {"X-API-Key": TEST_KEY}
 
 
+
 # ─── #80 route versioning ────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("path", ["/status", "/capabilities", "/config", "/mods", "/modifiers"])
@@ -98,3 +99,44 @@ def test_credentials_are_not_enabled():
     cors = [m for m in app.user_middleware if m.cls is CORSMiddleware]
     assert cors, "CORS middleware missing"
     assert cors[0].kwargs.get("allow_credentials") is False
+
+
+# ─── #33 web console ─────────────────────────────────────────────────────────
+
+def test_console_is_served_at_root():
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert r.headers.get("cache-control") == "no-store"
+
+
+def test_console_is_public_but_the_api_is_not():
+    """The page is only markup; everything it can DO still needs the key."""
+    bare = TestClient(app, raise_server_exceptions=False)
+    app.dependency_overrides.pop(require_api_key, None)
+    try:
+        assert bare.get("/").status_code == 200
+        assert bare.get("/v1/status").status_code == 401
+        assert bare.get("/v1/modifiers").status_code == 401
+    finally:
+        app.dependency_overrides[require_api_key] = lambda: TEST_KEY
+
+
+def test_console_targets_the_versioned_routes():
+    """A console pinned to the legacy bare paths would silently miss /v1."""
+    html = client.get("/").text
+    assert "const API_BASE = '/v1'" in html
+
+
+def test_console_is_a_wellformed_document():
+    html = client.get("/").text
+    for tag in ("<!doctype html>", "<html", "</html>", "<head>", "</head>", "<body>", "</body>"):
+        assert tag in html.lower() or tag in html, f"missing {tag}"
+    assert html.count("<script>") == html.count("</script>")
+
+
+def test_console_declares_no_hardcoded_key():
+    """A shipped console must not carry a credential — this repo is public."""
+    html = client.get("/").text
+    import re
+    assert not re.search(r'X-API-Key["\']\s*:\s*["\'][A-Za-z0-9]{16,}', html)
