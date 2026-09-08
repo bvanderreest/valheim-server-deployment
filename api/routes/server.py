@@ -117,13 +117,24 @@ def _get_version() -> Optional[str]:
     return None
 
 
+# Valheim never logs "Join code: NNNNNN". VERIFIED against the live server
+# 2026-09-08 — the real lines are:
+#   Session "Lowood-AU" registered with join code 366974
+#   Session "Lowood-AU" with join code 366974 and IP ... is active
+# The old pattern matched neither, so join_code was always null.
+_JOIN_CODE_RE = re.compile(r"join code[:\s]+([0-9A-Za-z]{4,16})", re.IGNORECASE)
+
+
 def _get_join_code() -> Optional[str]:
-    tail = _tail_log(200)
-    matches = [line for line in tail if re.search(r"Join code: [0-9a-zA-Z]{6}", line)]
-    if not matches:
-        return None
-    m = re.search(r"Join code: ([0-9a-zA-Z]{6})", matches[-1])
-    return m.group(1) if m else None
+    # The code is issued once at startup, so a 200-line tail loses it as soon
+    # as the server logs anything. Scan a much deeper window, and fall back to
+    # the whole file if needed — the log is rotated on every start, so this
+    # stays bounded in practice.
+    for depth in (2000, 50000):
+        matches = _JOIN_CODE_RE.findall("\n".join(_tail_log(depth)))
+        if matches:
+            return matches[-1]
+    return None
 
 
 def _get_last_save() -> Optional[str]:
