@@ -702,30 +702,6 @@ const realApi = {
   del(p, k){ return this._req('DELETE', p, k); },
 };
 
-// Which one are we? Decided by evidence, not by a build flag: ask the
-// unauthenticated /health endpoint. Served by FastAPI -> real. Opened as a
-// standalone file (or a published artifact) -> mock, and the UI says so.
-let api = mockApi;
-let LIVE = false;
-
-async function detectMode(){
-  try {
-    const res = await fetch('/health', { method: 'GET' });
-    if (res.ok){
-      const b = await res.json();
-      if (b && b.status === 'ok'){ api = realApi; LIVE = true; }
-    }
-  } catch { /* stays mock */ }
-  const note = document.querySelector('.demo');
-  if (note){
-    note.innerHTML = LIVE
-      ? '<b>Live.</b> Connected to this server\u2019s API. Enter the key from <span class="mono">API_KEYS</span> in the server\u2019s <span class="mono">.env</span>.'
-      : '<b>Demo build \u2014 the key is already filled in.</b> Press Unlock. The API is mocked in this page; the field is pre-set to <span class="mono">demo-key-1234</span>.';
-  }
-  const keyInput = document.getElementById('key');
-  if (LIVE && keyInput){ keyInput.value = ''; keyInput.placeholder = 'Paste the key from the server\u2019s .env'; }
-  return LIVE;
-}
 
 const mockApi = {
   async health(){ await sleep(90); return { status:'ok', server_type:'valheim', server_label:S.config.SERVER_NAME }; },
@@ -800,6 +776,31 @@ const mockApi = {
 /* ===================== AUTH ===================== */
 let KEY = null;
 const lock = $('#lock'), lockErr = $('#lock-err'), keyIn = $('#key');
+// Which one are we? Decided by evidence, not by a build flag: ask the
+// unauthenticated /health endpoint. Served by FastAPI -> real. Opened as a
+// standalone file (or a published artifact) -> mock, and the UI says so.
+let api = mockApi;
+let LIVE = false;
+
+async function detectMode(){
+  try {
+    const res = await fetch('/health', { method: 'GET' });
+    if (res.ok){
+      const b = await res.json();
+      if (b && b.status === 'ok'){ api = realApi; LIVE = true; }
+    }
+  } catch { /* stays mock */ }
+  const note = document.querySelector('.demo');
+  if (note){
+    note.innerHTML = LIVE
+      ? '<b>Live.</b> Connected to this server\u2019s API. Enter the key from <span class="mono">API_KEYS</span> in the server\u2019s <span class="mono">.env</span>.'
+      : '<b>Demo build \u2014 the key is already filled in.</b> Press Unlock. The API is mocked in this page; the field is pre-set to <span class="mono">demo-key-1234</span>.';
+  }
+  const keyInput = document.getElementById('key');
+  if (LIVE && keyInput){ keyInput.value = ''; keyInput.placeholder = 'Paste the key from the server\u2019s .env'; }
+  return LIVE;
+}
+
 async function boot(){
   await detectMode();
   const h = await api.health();
