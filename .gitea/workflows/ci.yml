@@ -33,10 +33,10 @@ jobs:
         # proves it, because a .gitattributes nobody verifies is a wish.
         run: |
           fail=0
-          for f in $(git ls-files '*.sh' '*.conf' '*.service' '*.timer'); do
+          for f in $(git ls-files -- '*.sh' '*.py' '*.conf' '*.service' '*.timer' '*.md' '*.txt' '*.yml' '*.yaml' '*.json' '.gitignore'); do
             if grep -qU $'\r' "$f"; then echo "CRLF in $f"; fail=1; fi
           done
-          [ $fail -eq 0 ] && echo "all tracked scripts are LF"
+          [ $fail -eq 0 ] && echo "all tracked text files are LF"
           exit $fail
 
       - name: shellcheck (warning and above)
