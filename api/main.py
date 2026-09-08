@@ -10,6 +10,7 @@ from .routes.config import router as config_router
 from .routes.logs import router as logs_router
 from .routes.metrics import router as metrics_router
 from .routes.mods import router as mods_router
+from .routes.modifiers import router as modifiers_router
 from .routes.server import router as server_router
 
 
@@ -64,5 +65,6 @@ app.include_router(server_router, dependencies=[Depends(require_api_key)])
 app.include_router(logs_router, dependencies=[Depends(require_api_key)])
 app.include_router(config_router, dependencies=[Depends(require_api_key)])
 app.include_router(mods_router, dependencies=[Depends(require_api_key)])
+app.include_router(modifiers_router, dependencies=[Depends(require_api_key)])
 # /metrics is unauthenticated — consumable by Prometheus/Grafana without API key
 app.include_router(metrics_router)
