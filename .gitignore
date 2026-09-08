@@ -46,3 +46,8 @@ CLAUDE.md
 .claude/
 .mcp.json
 .claude-flow/
+
+# Rolling backups written by PATCH /modifiers
+modifiers.conf.bak-*
+# Rotated API logs
+.api.log.*
