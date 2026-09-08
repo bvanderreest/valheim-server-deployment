@@ -23,7 +23,11 @@ mkbackup(){ # a pre-1.0 flat backup containing OLD content
   echo "OLD-FWL"               > "$T/stage/worlds_local/CrowsNest.fwl"
   tar -czf "$BACKUP_DIR/world-CrowsNest-2026-06-13_00-00-00.tar.gz" -C "$T/stage" worlds_local
 }
-run_guard(){ ( set +e; source "$REPO/helpers.sh"; guard_world ) 2>&1; }
+# CRITICAL: the manager runs with `set -eo pipefail`. The tests must too, or
+# they miss the entire class of "pipeline fails under pipefail" bugs — which
+# is exactly what happened: backup() verification passed here and failed on
+# the real host.
+run_guard(){ ( set -eo pipefail; set +e; source "$REPO/helpers.sh"; guard_world ) 2>&1; }
 
 echo "TEST 1: chunked (1.0) world must NOT be touched"
 setup; mkbackup
@@ -72,7 +76,7 @@ OUT="$(GUARD_WORLD=false run_guard)"
 echo "$OUT" | grep -qi "disabled" && ok "GUARD_WORLD=false honoured" || no "flag ignored"
 rm -rf "$T"
 
-run_backup(){ ( set +e; source "$REPO/config.conf" >/dev/null 2>&1; source "$REPO/helpers.sh"; \
+run_backup(){ ( set -eo pipefail; set +e; source "$REPO/config.conf" >/dev/null 2>&1; source "$REPO/helpers.sh"; \
                 BACKUPS_KEEP=5; source /dev/stdin <<< "$(sed -n "/^backup() {/,/^}/p" "$REPO/valheim-server-manager.sh")"; \
                 backup ) 2>&1; }
 

@@ -158,8 +158,13 @@ world_layout() {
 world_has_data() {
   local world_dir="${SAVEDIR}/worlds_local"
   [[ -d "${world_dir}" ]] || return 1
-  find "${world_dir}" -maxdepth 1 -name "${WORLD_NAME}*" \
-       \( -type f -size +0c -o -type d \) 2>/dev/null | grep -q . 
+  # NOTE: no `| grep -q` here. Under `set -o pipefail` (which the manager
+  # sets) grep -q exits on the first match, the producer gets SIGPIPE, and
+  # the pipeline reports FAILURE exactly when it found something.
+  local found
+  found="$(find "${world_dir}" -maxdepth 1 -name "${WORLD_NAME}*" \
+           \( -type f -size +0c -o -type d \) 2>/dev/null || true)"
+  [[ -n "${found}" ]]
 }
 
 guard_world() {
@@ -217,7 +222,8 @@ guard_world() {
   # Getting this wrong silently puts the world in the wrong directory, which
   # looks like a successful restore and isn't. (Caught by the guard tests.)
   local dest
-  if tar -tzf "${last}" 2>/dev/null | grep -qE "^(\./)?worlds_local/"; then
+  local listing; listing="$(tar -tzf "${last}" 2>/dev/null || true)"
+  if grep -qE "^(\./)?worlds_local/" <<< "${listing}"; then
     dest="${SAVEDIR}"
   else
     dest="${world_dir}"

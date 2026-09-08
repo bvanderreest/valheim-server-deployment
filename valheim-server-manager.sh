@@ -558,7 +558,11 @@ backup() {
     rm -f "${out}"
     return 1
   fi
-  if ! tar -tzf "${out}" 2>/dev/null | grep -q "${WORLD_NAME}"; then
+  # Capture first: `tar ... | grep -q` fails under `set -o pipefail` because
+  # grep -q closes the pipe on match and tar dies of SIGPIPE. That made this
+  # check fail on every SUCCESSFUL backup. Caught on the live host.
+  local listing; listing="$(tar -tzf "${out}" 2>/dev/null || true)"
+  if ! grep -q "${WORLD_NAME}" <<< "${listing}"; then
     echo "[backup] ERROR: archive contains no files for '${WORLD_NAME}' — removing it." >&2
     rm -f "${out}"
     return 1
