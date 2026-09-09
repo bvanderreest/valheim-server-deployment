@@ -880,6 +880,12 @@ function renderStatus(){
 // Accepts epoch millis OR an ISO 8601 string. The mock supplied numbers; the
 // real API returns ISO ("2026-09-08T11:56:08Z"), so subtracting it from a
 // number produced "NaN h NaN min ago" against the live server.
+// Null-safe formatters. /status returns null for runtime figures when the
+// server is stopped, and `backups` is a LIST of objects, not a count —
+// assuming otherwise rendered "undefined MB" and "[object Object]" live.
+function num(v){ return typeof v === 'number' ? v.toLocaleString() : '—'; }
+function mb(bytes){ return typeof bytes === 'number' ? `${(bytes/1048576).toFixed(1)} MB` : '—'; }
+function count(v){ return Array.isArray(v) ? v.length : (typeof v === 'number' ? v : 0); }
 function ago(t){
   if (t === null || t === undefined || t === '') return '—';
   const ms = typeof t === 'number' ? t : Date.parse(t);
@@ -963,7 +969,7 @@ function renderOverview(){
   $('#o-players').innerHTML = s.players.count ? s.players.names.map(n=>`<div class="player"><span class="dot on"></span>${esc(n)}</div>`).join('') : `<p class="players-empty">Nobody is on. ${s.running ? 'The server is up and listed — the join code on the left gets them in.' : 'The server is stopped.'}</p>`;
   $('#o-slots').textContent = `${s.players.count} / ${s.players.max}`; $('#o-slotfill').style.width = (100*s.players.count/s.players.max)+'%';
   const x = s.extras;
-  $('#o-world').innerHTML = kv([['Objects', x.world_objects.toLocaleString()],['Save file', `${x.world_size_mb} MB`],['Last save', ago(s.last_save)],['A save takes', `${x.save_seconds} s`],['Backups kept', `${x.backups} of ${S.config.BACKUPS_KEEP}`],['Autosave every', `${S.config.SAVE_INTERVAL/60} min`]]);
+  $('#o-world').innerHTML = kv([['Objects', num(x.world_objects)],['Save file', mb(x.world_bytes)],['Last save', ago(s.last_save)],['A save takes', x.save_seconds == null ? '—' : `${x.save_seconds} s`],['Backups kept', `${count(x.backups)} of ${S.config.BACKUPS_KEEP ?? '?'}`],['Autosave every', `${S.config.SAVE_INTERVAL/60} min`]]);
   $('#o-proc').innerHTML = kv([['State', s.running?'running':'stopped'],['Process', s.pid?`pid ${s.pid}`:'—'],['Uptime', s.running?s.uptime_human:'—'],['Memory (RSS)', s.running?`${(x.rss_mb/1024).toFixed(1)} GB`:'—'],['Version', s.version],['Listening', `${ip}:${s.connection.port}`]]);
   const m = S.mod; const eff = effective(m);
   const parts = [`Preset <b>${m.preset||'none'}</b>`];

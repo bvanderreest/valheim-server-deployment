@@ -168,3 +168,14 @@ def test_console_ago_handles_iso_strings():
     html = client.get("/").text
     assert "Date.parse(t)" in html
     assert "Number.isFinite(ms)" in html
+
+
+def test_console_reads_the_fields_the_api_actually_sends():
+    """Contract check. The console once read world_size_mb and treated
+    backups as a count, while /status sends world_bytes and a list —
+    rendering 'undefined MB' and '[object Object]' against the live API.
+    A shape assumption is not a contract."""
+    html = client.get("/").text
+    assert "x.world_bytes" in html, "console must read world_bytes"
+    assert "world_size_mb" not in html, "stale field name still referenced"
+    assert "count(x.backups)" in html, "backups is a list, not a count"
