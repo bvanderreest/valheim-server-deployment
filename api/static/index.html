@@ -282,7 +282,8 @@ p{margin:0}
 .logbox{border:1px solid var(--line);border-radius:10px;background:var(--inset);padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.55;height:60vh;min-height:280px;overflow:auto;color:var(--ink-2);white-space:pre-wrap;word-break:break-word}
 .logbox .ln{display:block}
 .logbox .ln.warn{color:var(--accent)}
-.logbox .ln.err{color:var(--danger)}
+.logbox .ln#conn-lost{position:sticky;top:0;z-index:30;margin:0;border-radius:0}
+.err{color:var(--danger)}
 .logbox .ln b{color:var(--ink);font-weight:500}
 .logtools{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
@@ -401,6 +402,7 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
 </div>
 
 <!-- ============ APP ============ -->
+<div class="err" id="conn-lost" role="status" aria-live="polite" hidden></div>
 <header class="top">
   <div class="brand">Hugin <small>server console</small></div>
   <nav class="nav" aria-label="Views">
@@ -856,11 +858,60 @@ document.addEventListener('click', e => { const b = e.target.closest('[data-nav]
 /* ===================== STATUS / RAIL ===================== */
 let status = null, pollTimer = null, pollGen = 0, pending = null, seenCode = store.get('hugin.seenCode');
 function stopPolling(){ clearTimeout(pollTimer); pollTimer = null; }
+let unreachableSince = null;
+// Keep the last known figures on screen and say they are stale. Blanking them
+// reads as "zero players, no uptime", which is a different and wrong claim.
+function renderUnreachable(extra){
+  const el = $('#conn-lost'); if (!el) return;
+  const secs = unreachableSince ? Math.round((Date.now() - unreachableSince) / 1000) : 0;
+  const how = secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m`;
+  el.innerHTML = `<b>Lost contact with the server.</b> No answer for ${how}` +
+    (extra ? ` \u2014 ${esc(extra)}` : '') +
+    `. The figures below are the last known values, not current. Still retrying.`;
+  el.hidden = false;
+  const dot = $('#r-dot'); if (dot) dot.className = 'dot off';
+  const st = $('#r-state'); if (st) st.textContent = 'Unreachable';
+}
+
 async function poll(){
   const g = ++pollGen; stopPolling();
   const r = await api.get('/status', KEY);
   if (g !== pollGen) return;
-  if (r.status === 401){ $('#lock-btn').click(); return; }
+
+  // THREE outcomes, not two. Conflating them is how a dead key looks healthy
+  // and a network blip looks like a broken server.
+  //
+  //   401  the key is REJECTED — the server is fine, our access is not
+  //   0    we never REACHED the server — say so, keep the last known values
+  //   200  real data
+  if (r.status === 401){
+    // Previously this silently clicked Lock, dumping the operator at a login
+    // screen with no idea why. Say what happened.
+    KEY = null; store.del('hugin.apiKey');
+    stopPolling(); lock.hidden = false;
+    lockErr.innerHTML = '<b>Key rejected.</b> The server is reachable, but it no longer ' +
+      'accepts this key \u2014 it was probably rotated in <span class="mono">API_KEYS</span>. ' +
+      'Paste the current one.';
+    lockErr.setAttribute('data-show', '');
+    keyIn.value = ''; keyIn.focus();
+    return;
+  }
+  if (r.status === 0){
+    // Transport failure. The old code assigned the error body to `status` and
+    // rendered it, producing an undefined mess on any brief network blip.
+    unreachableSince = unreachableSince || Date.now();
+    renderUnreachable();
+    pollTimer = setTimeout(poll, 5000);
+    return;
+  }
+  if (r.status !== 200){
+    unreachableSince = unreachableSince || Date.now();
+    renderUnreachable(`The API answered ${r.status}.`);
+    pollTimer = setTimeout(poll, 5000);
+    return;
+  }
+  unreachableSince = null;
+  const banner = $('#conn-lost'); if (banner) banner.hidden = true;
   status = r.body; renderStatus(); checkPending();
   pollTimer = setTimeout(poll, pending ? 1500 : 5000);
 }
