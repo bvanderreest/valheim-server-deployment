@@ -144,6 +144,57 @@ def test_cadence_is_ok_when_saves_match_the_setting():
     assert f["verdict"] == F.OK
 
 
+def _cadence(old_gap, old_n, new_gap, new_n, t=1_000_000.0):
+    """Saves at one cadence, then another — the shape of a config change."""
+    rows, now = [], t
+    for _ in range(old_n):
+        rows.append({"kind": "save", "epoch": now, "ms": 500.0, "exact": True,
+                     "total_ms": 4200.0, "objects": None, "zdos": 419858})
+        now += old_gap
+    for _ in range(new_n):
+        rows.append({"kind": "save", "epoch": now, "ms": 500.0, "exact": True,
+                     "total_ms": 4200.0, "objects": None, "zdos": 419858})
+        now += new_gap
+    return rows
+
+
+def test_cadence_finds_the_current_regime_from_only_a_few_new_saves():
+    """The second bug, also found live. Judging on a fixed count of recent gaps
+    left ten samples straddling the change: five at 5 min and five at 30 gave a
+    median of 17.5 min, matching neither, and the correct server was reported
+    as `watch` on every window longer than two hours."""
+    f = F._cfg_cadence(_cadence(300, 248, 1800, 6), interval_s=1800)
+    assert f["verdict"] == F.OK
+    ev = {e["label"]: e["value"] for e in f["evidence"]}
+    assert ev["Current cadence"].startswith("30.0 min")
+    assert "5 gaps" in ev["Current cadence"]
+    assert ev["Earlier in this window"].startswith("5.0 min")
+
+
+def test_cadence_says_unknown_until_the_new_cadence_has_two_gaps():
+    """One gap at a new cadence is not evidence of anything."""
+    f = F._cfg_cadence(_cadence(300, 200, 1800, 2), interval_s=1800)
+    assert f["verdict"] == F.UNKNOWN
+    assert "too recently to judge" in f["headline"]
+
+
+def test_cadence_still_catches_a_genuinely_wrong_setting():
+    """The regime walk must not turn every mismatch into 'recently changed'."""
+    f = F._cfg_cadence(_cadence(300, 40, 300, 10), interval_s=1800)
+    assert f["verdict"] == F.PROBLEM
+    assert "not what is driving them" in f["headline"]
+
+
+def test_cadence_tolerates_a_jittery_save_within_one_regime():
+    """A save delayed by a busy tick must not split the run."""
+    rows = _saves([500] * 12, gap=1800)
+    rows[7]["epoch"] += 200      # ~11% late, inside tolerance
+    rows[8]["epoch"] += 200
+    f = F._cfg_cadence(rows, interval_s=1800)
+    assert f["verdict"] == F.OK
+    assert "11 gaps" in {e["label"]: e["value"] for e in f["evidence"]}["Current cadence"]
+
+
 def test_cadence_is_not_fooled_by_a_window_that_spans_a_config_change():
     """Found live, not in review. Two hours after SAVE_INTERVAL went 5 min ->
     30 min, the 24 h window held 260 gaps of which 250 were from the old
@@ -160,7 +211,7 @@ def test_cadence_is_not_fooled_by_a_window_that_spans_a_config_change():
     assert f["verdict"] == F.OK, "the setting IS being honoured now"
     assert "changed during this window" in f["headline"]
     ev = {e["label"]: e["value"] for e in f["evidence"]}
-    assert ev["Recent gap (median)"].startswith("30.0 min")
+    assert ev["Current cadence"].startswith("30.0 min")
     assert ev["Earlier in this window"].startswith("5.0 min"), "the change is evidence, not noise"
 
 
@@ -171,7 +222,7 @@ def test_cadence_orders_saves_before_measuring_gaps():
     rows.reverse()
     f = F._cfg_cadence(rows, interval_s=1800)
     assert f["verdict"] == F.OK
-    assert f["evidence"][-1]["value"] == "11"
+    assert f["evidence"][-1]["value"] == "11"  # gaps in window
 
 
 def test_budget_quantifies_the_lever_at_other_intervals():
