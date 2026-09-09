@@ -284,6 +284,48 @@ p{margin:0}
   .perftable{font-size:12.5px}
 }
 
+/* ---------- findings ---------- */
+/* Status colours, and they are RESERVED — never a series hue, never the accent
+   that means "a control you press". Each ships with a word and a glyph, so the
+   verdict never depends on colour alone. */
+.dom-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:18px 0 14px}
+.dom{border:1px solid var(--line);border-left:3px solid var(--ink-3);border-radius:12px;background:var(--surface);padding:13px 15px}
+.dom .who{font-size:12.5px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.06em}
+.dom .say{font-weight:600;font-size:17px;margin-top:3px;letter-spacing:-.01em}
+.dom .of{font-size:12px;color:var(--ink-3);margin-top:2px}
+.dom[data-v="ok"]{border-left-color:var(--good)}
+.dom[data-v="watch"]{border-left-color:var(--accent-fill)}
+.dom[data-v="problem"]{border-left-color:var(--danger)}
+
+.findings{display:grid;gap:12px}
+.finding{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:15px 17px}
+.finding[data-v="problem"]{border-color:var(--danger-line)}
+.finding[data-v="watch"]{border-color:var(--accent-line)}
+.f-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:3px 9px 3px 7px;border-radius:20px;border:1px solid var(--line);background:var(--bg);white-space:nowrap}
+.chip .g{font-size:11px;line-height:1}
+.chip[data-v="ok"]{color:var(--good);border-color:var(--good)}
+.chip[data-v="watch"]{color:var(--accent);border-color:var(--accent-line)}
+.chip[data-v="problem"]{color:var(--danger);border-color:var(--danger-line)}
+.chip[data-v="unknown"]{color:var(--ink-3);border-color:var(--line-strong)}
+.f-dom{font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.07em}
+.f-head{font-size:14.5px;font-weight:500;line-height:1.45;max-width:70ch}
+.f-ev{display:grid;grid-template-columns:auto 1fr;gap:5px 18px;font-size:13px;margin-top:11px;border-top:1px solid var(--line);padding-top:11px}
+.f-ev dt{color:var(--ink-2)}
+.f-ev dd{margin:0;font-variant-numeric:tabular-nums;text-align:right}
+.f-method{margin-top:11px;font-size:12.5px}
+.f-method summary{color:var(--ink-2);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:6px}
+.f-method summary::-webkit-details-marker{display:none}
+.f-method summary::before{content:"▸";font-size:10px;transition:transform 120ms ease}
+.f-method[open] summary::before{transform:rotate(90deg)}
+.f-method p{color:var(--ink-3);margin-top:7px;max-width:72ch;line-height:1.55}
+@media (prefers-reduced-motion:reduce){.f-method summary::before{transition:none}}
+@media (max-width:760px){
+  .dom-row{grid-template-columns:1fr}
+  .f-ev{grid-template-columns:1fr;gap:2px 0}
+  .f-ev dd{text-align:left;color:var(--ink);margin-bottom:6px}
+}
+
 /* ---------- difficulty ---------- */
 .strata{display:grid;gap:26px}
 .stratum{display:grid;grid-template-columns:150px 1fr;gap:20px;padding-top:18px;border-top:1px solid var(--line)}
@@ -708,16 +750,9 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
         <div class="answer" id="p-answer" role="status" aria-live="polite" hidden></div>
       </div>
 
-      <div class="grid2" style="margin-top:18px">
-        <div class="panel">
-          <h2>What drives each one</h2>
-          <dl class="kv" id="p-context"></dl>
-        </div>
-        <div class="panel">
-          <h2>What you can change</h2>
-          <div class="muted" style="font-size:13.5px;line-height:1.6" id="p-levers"></div>
-        </div>
-      </div>
+      <div class="view-head" style="margin-top:26px"><div><h1 style="font-size:17px">What the numbers say</h1><p>Each of these is computed from this window's log, not written in advance. Every verdict shows the figures it was reached from, and how.</p></div></div>
+      <div class="dom-row" id="p-domains"></div>
+      <div class="findings" id="p-findings"></div>
     </section>
 
     <!-- ---------- DIFFICULTY ---------- -->
@@ -1003,8 +1038,65 @@ function perfDoc(hours){
   const span = (to - from) / 3600;
   const save = _summarise(events, 'save', span), gc = _summarise(events, 'gc', span);
   const blocked = Math.round((save.total_ms + gc.total_ms) * 10) / 10;
+  // Findings are computed server-side. The mock does NOT reimplement that
+  // engine — a second implementation would drift from the first and the drift
+  // would be invisible. It supplies the response SHAPE, with one finding in
+  // each verdict so every visual state is exercised in the demo.
+  const findings = [
+    { domain:'network', id:'relay', verdict:'problem',
+      headline:"2 relay outages on this server's own link — the longest lasted 92 s.",
+      evidence:[{label:'Outages',value:'2',epoch:null},{label:'Total events',value:'7',epoch:null},
+                {label:'Longest',value:'92 s, 6 events',epoch:null},
+                {label:'Started',value:'',epoch:t1-4*3600},
+                {label:'Kinds',value:'playfab-retry, relay-lost',epoch:null}],
+      method:"Counts `Game server connected failed` and PlayFab login attempts past the first. Both mean the SERVER could not reach the relay — the only part of the network path this log can see." },
+    { domain:'configuration', id:'freeze-budget', verdict:'watch',
+      headline:'Your settings cost about 1.10 s of freeze an hour; GC adds 630 ms that no setting can remove.',
+      evidence:[{label:'Typical save stall',value:'550 ms',epoch:null},
+                {label:'Saves per hour (from config)',value:'2.0',epoch:null},
+                {label:'Frozen per hour by saves',value:'1.10 s',epoch:null},
+                {label:'If SAVE_INTERVAL were 5 min',value:'6.60 s/hour frozen',epoch:null},
+                {label:'If SAVE_INTERVAL were 60 min',value:'550 ms/hour frozen',epoch:null}],
+      method:'The only freeze you control is how OFTEN a save happens. How LONG each one takes is the world\u2019s size, and that only shrinks by demolishing things.' },
+    { domain:'network', id:'traffic', verdict:'unknown',
+      headline:'Nobody has been on, so there is no traffic to judge.',
+      evidence:[{label:'Samples with players',value:'0',epoch:null},{label:'Samples total',value:'116',epoch:null}],
+      method:'Per-player throughput comes from the periodic `Connections` line. It needs someone actually playing.' },
+    { domain:'hardware', id:'cpu-drift', verdict:'ok',
+      headline:'Hardware is not the problem — identical work is taking the same time.',
+      evidence:[{label:'First half (median stall)',value:'537 ms over 116 saves',epoch:null},
+                {label:'Second half',value:'557 ms over 117 saves',epoch:null},
+                {label:'Change',value:'1.04\u00d7',epoch:null},
+                {label:'World objects across window',value:'419,858 \u2192 419,858',epoch:null},
+                {label:'Threshold',value:'watch at 1.25\u00d7, problem at 1.50\u00d7',epoch:null}],
+      method:'The save stall is CPU-bound and the world size barely moves, so a save is a benchmark that repeats itself for free. Comparing its median across the two halves of the window separates \u201cthe machine changed\u201d from \u201cthe world grew\u201d.' },
+    { domain:'hardware', id:'cpu-jitter', verdict:'ok',
+      headline:'The machine is steady — the same save takes the same time every time.',
+      evidence:[{label:'Mean stall',value:'544 ms',epoch:null},{label:'Spread (\u03c3)',value:'62 ms',epoch:null},
+                {label:'Variation',value:'11%',epoch:null},{label:'Fastest / slowest',value:'261 ms / 725 ms',epoch:null},
+                {label:'Samples',value:'233',epoch:null}],
+      method:'Identical work repeated on an uncontended machine lands in a tight band. A wide spread at a normal average is the signature of a noisy neighbour or a starved core \u2014 which a mean alone hides completely.' },
+    { domain:'hardware', id:'disk-io', verdict:'ok',
+      headline:'Disk is keeping up — write time is flat.',
+      evidence:[{label:'First half (median write)',value:'3.85 s over 116 saves',epoch:null},
+                {label:'Second half',value:'3.50 s over 117 saves',epoch:null},
+                {label:'Change',value:'0.91\u00d7',epoch:null},
+                {label:'Note',value:'Off the main thread — disk health, not a freeze',epoch:null}],
+      method:'`World saved (Nms)` covers the whole save; the PrepareSave part is CPU on the main thread. The difference is the background write, which is the only pure disk signal the log offers.' },
+    { domain:'hardware', id:'disk-space', verdict:'ok',
+      headline:'Disk space is not a factor.',
+      evidence:[{label:'Free now',value:'183.8 GB',epoch:null},{label:'Valheim blocks saves below',value:'43 MB',epoch:null},
+                {label:'Change',value:'0.1 GB/day used',epoch:null},{label:'Runway',value:'~2798 days',epoch:null}],
+      method:'Read from the `Available space` line Valheim writes before every save, so the figure is the game\u2019s own view of the volume it saves to \u2014 not the host\u2019s.' },
+    { domain:'configuration', id:'save-cadence', verdict:'ok',
+      headline:'Saves are landing exactly on the configured interval.',
+      evidence:[{label:'Observed gap (median)',value:'30.0 min',epoch:null},{label:'SAVE_INTERVAL',value:'30 min',epoch:null},
+                {label:'Ratio',value:'1.00\u00d7',epoch:null},{label:'Gaps measured',value:'11',epoch:null}],
+      method:'If these disagree, the running server is not using the .env you are reading \u2014 the single most common reason a config change appears to do nothing.' },
+  ];
   return {
     generated_at: t1, window_hours: hours, log_file: '/srv/valheim/logs/valheim-server.log',
+    findings, log_files_read: 2,
     log_covers_from: events.length || S.running ? from : null,
     log_covers_to: events.length || S.running ? to : null,
     observed_hours: Math.round(span * 1000) / 1000,
@@ -1482,7 +1574,7 @@ function renderPerf(){
 
   drawTimeline();
   renderPerfTable();
-  renderPerfContext();
+  renderFindings();
   renderPerfTease();
   $('#p-ask-tz').textContent = `(${TZ})`;
 }
@@ -1626,24 +1718,71 @@ function renderPerfTable(){
   }).join('');
 }
 
-function renderPerfContext(){
-  const d = PERF.data, c = d.context;
-  $('#p-context').innerHTML = kv([
-    ['World objects (ZDOs)', num(c.world_zdos)],
-    ['Loaded objects', num(c.loaded_objects)],
-    ['Autosave every', d.save_interval_s ? `${Math.round(d.save_interval_s/60)} min` : '—'],
-    ['Typical save stall', fmtMs(d.save.p50_ms)],
-    ['Worst save stall', fmtMs(d.save.max_ms)],
-    ['Typical GC pause', fmtMs(d.gc.p50_ms)],
-    ['Worst GC pause', fmtMs(d.gc.max_ms)],
-    ['Players at last sample', c.players === null ? '—' : String(c.players)],
-  ]);
-  $('#p-levers').innerHTML =
-    `<b>Save stall</b> — how OFTEN is <span class="mono">SAVE_INTERVAL</span>`
-    + (d.save_interval_s ? ` (now ${Math.round(d.save_interval_s/60)} min)` : '')
-    + `. How LONG is the world's ${num(c.world_zdos)} objects, and that only shrinks by demolishing things.<br><br>`
-    + `<b>GC pause</b> — no server-side lever exists, and no launch flag exposes it. Measured here: hourly on a fixed timer, ~630 ms, four fifths of it walking the object graph, and it reclaims <b>nothing</b> — 289 of 290 runs freed zero assets, flat across 290 h of uptime, so a restart does not help either. Whether it grows when players spread across the map is untested: every sample so far has nobody on and ${num(c.loaded_objects)} loaded objects that never move.<br><br>`
-    + `<b>Neither is network.</b> If a freeze is here, everyone online hits it at the same second. If only one person lagged, this panel will show nothing at that time — and that is the finding, not a gap.`;
+/* ---- findings: the judgements, with their evidence ----
+   These used to be two panels of prose I wrote about how Valheim behaves. That
+   said the same thing whatever the server was doing, which makes it a footnote
+   rather than a finding. Everything below is computed per window and arrives
+   with the numbers behind it, so a reader can reject the verdict and still use
+   the measurement. */
+const VERDICT = {
+  ok:      { word:'Clear',           glyph:'\u2713', rank:3 },
+  watch:   { word:'Worth watching',  glyph:'!',       rank:1 },
+  problem: { word:'Problem',         glyph:'\u2715', rank:0 },
+  unknown: { word:'Not enough data', glyph:'?',       rank:2 },
+};
+const DOMAIN_LABEL = { hardware:'Hardware', network:'Network', configuration:'Configuration' };
+// What each verdict MEANS differs by domain, and the difference is the point:
+// ruling hardware out is the finding a lag report needs, whereas a clean config
+// is just a config. Fixed phrases, not a slice of the headline — the first
+// version cut the sentence at its first "." and produced "Your settings cost
+// about 1".
+const DOMAIN_SAY = {
+  hardware:      { ok:'Ruled out', watch:'Drifting',         problem:'Degrading',     unknown:'Not enough data' },
+  network:       { ok:'Clean',     watch:'Occasional drops', problem:'Relay outages', unknown:'Not enough data' },
+  configuration: { ok:'No waste',  watch:'Costing freezes',  problem:'Misconfigured', unknown:'Not enough data' },
+};
+
+function renderFindings(){
+  const d = PERF.data, fs = (d && d.findings) || [];
+  const wrap = $('#p-findings'), doms = $('#p-domains');
+  if (!fs.length){
+    doms.innerHTML = '';
+    wrap.innerHTML = `<div class="finding"><div class="f-head muted">No findings yet — the log has not been running long enough to judge anything.</div></div>`;
+    return;
+  }
+
+  doms.innerHTML = ['hardware','network','configuration'].map(k => {
+    const mine = fs.filter(f => f.domain === k);
+    if (!mine.length) return '';
+    const worst = mine.reduce((a,f) => VERDICT[f.verdict].rank < VERDICT[a.verdict].rank ? f : a);
+    const v = worst.verdict;
+    const say = (DOMAIN_SAY[k] || {})[v] || v;
+    const clear = mine.filter(f => f.verdict === 'ok').length;
+    return `<div class="dom" data-v="${esc(v)}">
+      <div class="who">${esc(DOMAIN_LABEL[k])}</div>
+      <div class="say">${esc(say)}</div>
+      <div class="of">${clear} of ${mine.length} check${mine.length>1?'s':''} clear</div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = fs.map(f => {
+    const V = VERDICT[f.verdict] || VERDICT.unknown;
+    const ev = f.evidence.map(e => {
+      // An epoch arrives as a number so the BROWSER renders it. The server is
+      // in AU; half the group is not.
+      const val = e.epoch ? hms(e.epoch) : e.value;
+      return val === '' ? '' : `<dt>${esc(e.label)}</dt><dd>${esc(val)}</dd>`;
+    }).join('');
+    return `<div class="finding" data-v="${esc(f.verdict)}">
+      <div class="f-top">
+        <span class="chip" data-v="${esc(f.verdict)}"><span class="g" aria-hidden="true">${V.glyph}</span>${esc(V.word)}</span>
+        <span class="f-dom">${esc(DOMAIN_LABEL[f.domain] || f.domain)}</span>
+      </div>
+      <div class="f-head">${esc(f.headline)}</div>
+      ${ev ? `<dl class="f-ev">${ev}</dl>` : ''}
+      <details class="f-method"><summary>How this was judged</summary><p>${esc(f.method)}</p></details>
+    </div>`;
+  }).join('');
 }
 
 /* ---- "was it the server?" ---- */

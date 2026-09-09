@@ -33,9 +33,11 @@ from __future__ import annotations
 import re
 from collections import deque
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 from ..config import settings
+from . import findings as _findings
 
 # Verbatim shapes, all confirmed against the running server's log:
 #   09/09/2026 10:25:02: PrepareSave: clone done in 256ms
@@ -51,6 +53,16 @@ _RE_SAVE_TOTAL = re.compile(r"World saved \(\s*([0-9.]+)ms\s*\)")
 _RE_UNLOAD = re.compile(r"Loaded Objects now: (\d+)")
 _RE_GC_TOTAL = re.compile(r"^Total: ([0-9.]+) ms \(FindLiveObjects")
 _RE_CONN = re.compile(r"Connections (\d+) ZDOS:(\d+)\s+sent:(\d+) recv:(\d+)")
+# Signals the first pass ignored, each of which answers a question prose cannot:
+#   Saved N ZDOs      the workload behind a save — without it, "slower" and
+#                     "bigger world" are indistinguishable
+#   Available space   Valheim's own view of the volume it saves to
+#   connected failed  THIS server losing the PlayFab relay. Not a player's link;
+#                     the only part of the network path the log can see at all
+_RE_SAVED_ZDOS = re.compile(r"Saved (\d+) ZDOs")
+_RE_DISK = re.compile(r"Available space to current user: (\d+)\. Saving is blocked if below: (\d+) bytes")
+_RE_RELAY_FAIL = re.compile(r"Game server connected failed")
+_RE_LOGIN_RETRY = re.compile(r"Sending PlayFab login request \(attempt (\d+)\)")
 
 # A `World saved` line belongs to the PrepareSave immediately before it. On the
 # live server the gap is ~4s; anything beyond a minute is a different save (or a
@@ -78,12 +90,74 @@ def _tail_lines(n: int = MAX_TAIL_LINES) -> list[str]:
         return []
 
 
-def parse_events(lines: list[str]) -> tuple[list[dict], dict, tuple[Optional[float], Optional[float]]]:
-    """Return (events, context, (first_ts, last_ts)) for a block of log lines.
+def _rotated_logs(window_start: float) -> list[Path]:
+    """Archived logs that could still hold part of the window, oldest first.
 
-    Events are in log order, which is chronological.
+    A restart rotates the log, so reading only the current file means every
+    restart silently shortens the window to nothing — and a trend needs hours.
+    The archive name is the time it was ROTATED, i.e. when its content ends, so
+    any archive rotated after the window opened may hold part of it.
+    """
+    out = []
+    try:
+        for f in settings.logfile.parent.glob("valheim-server-*.log"):
+            m = re.match(r"valheim-server-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.log$", f.name)
+            if not m:
+                continue
+            try:
+                ends = datetime(*(int(g) for g in m.groups())).timestamp()
+            except ValueError:
+                continue
+            if ends >= window_start:
+                out.append((ends, f))
+    except OSError:
+        return []
+    return [f for _, f in sorted(out)]
+
+
+def _lines_covering(window_start: float, budget: int = MAX_TAIL_LINES) -> list[str]:
+    """Current log plus whatever archives are needed to reach back to the window.
+
+    Reads newest-first and stops at the line budget, so a 24 h window on a
+    chatty server costs the same as a 1 h one.
+    """
+    files = _rotated_logs(window_start) + [settings.logfile]
+    chunks: list[list[str]] = []
+    remaining = budget
+    for f in reversed(files):
+        if remaining <= 0:
+            break
+        try:
+            with f.open(errors="replace") as fh:
+                got = list(deque(fh, maxlen=remaining))
+        except OSError:
+            continue
+        chunks.append(got)
+        remaining -= len(got)
+    out: list[str] = []
+    for c in reversed(chunks):
+        out.extend(c)
+    return out
+
+
+def parse_events(lines: list[str]) -> tuple[list[dict], dict, tuple[Optional[float], Optional[float]]]:
+    """Return (events, context, (first_ts, last_ts)) — the event view only."""
+    p = parse_all(lines)
+    return p["events"], p["context"], (p["first_ts"], p["last_ts"])
+
+
+def parse_all(lines: list[str]) -> dict:
+    """Events plus the signal series the findings are computed from.
+
+    Returns events, and three time series that answer questions the events
+    cannot on their own: `disk` (free space, so "is the volume filling"),
+    `net` (byte counters and player count), and `incidents` (this server
+    losing the PlayFab relay).
     """
     events: list[dict] = []
+    disk: list[dict] = []
+    net: list[dict] = []
+    incidents: list[dict] = []
     context: dict = {
         "world_zdos": None,
         "loaded_objects": None,
@@ -120,6 +194,9 @@ def parse_events(lines: list[str]) -> tuple[list[dict], dict, tuple[Optional[flo
                     "exact": True,
                     "total_ms": None,
                     "objects": None,
+                    # The workload this stall was doing. Without it, "the save
+                    # got slower" and "the world got bigger" look identical.
+                    "zdos": None,
                 })
             clone_ms = clone_ts = None
             continue
@@ -134,6 +211,35 @@ def parse_events(lines: list[str]) -> tuple[list[dict], dict, tuple[Optional[flo
                         and 0 <= when - ev["epoch"] <= _SAVE_TOTAL_MAX_GAP_S:
                     ev["total_ms"] = total
                 break
+            continue
+
+        if (m := _RE_SAVED_ZDOS.search(line)):
+            for ev in reversed(events):
+                if ev["kind"] == "save":
+                    if ev.get("zdos") is None:
+                        ev["zdos"] = int(m.group(1))
+                    break
+            continue
+
+        if (m := _RE_DISK.search(line)):
+            when = ts if ts is not None else last_ts
+            if when is not None:
+                disk.append({"epoch": when, "free": int(m.group(1)),
+                             "block_below": int(m.group(2))})
+            continue
+
+        if _RE_RELAY_FAIL.search(line):
+            when = ts if ts is not None else last_ts
+            if when is not None:
+                incidents.append({"epoch": when, "kind": "relay-lost"})
+            continue
+
+        if (m := _RE_LOGIN_RETRY.search(line)):
+            # Attempt 1 is the normal path. Anything past it is a retry.
+            if int(m.group(1)) > 1:
+                when = ts if ts is not None else last_ts
+                if when is not None:
+                    incidents.append({"epoch": when, "kind": "playfab-retry"})
             continue
 
         if (m := _RE_UNLOAD.search(line)):
@@ -159,12 +265,17 @@ def parse_events(lines: list[str]) -> tuple[list[dict], dict, tuple[Optional[flo
             context["world_zdos"] = int(m.group(2))
             context["net_sent_bytes"] = int(m.group(3))
             context["net_recv_bytes"] = int(m.group(4))
+            when = ts if ts is not None else last_ts
+            if when is not None:
+                net.append({"epoch": when, "players": int(m.group(1)),
+                            "sent": int(m.group(3)), "recv": int(m.group(4))})
 
     # An event before the first timestamped line has nothing to place it on.
     # Dropping it is right: an event with no time cannot go on a timeline, and
     # inventing one would put a fake mark under a real player complaint.
     events = [e for e in events if e["epoch"] is not None]
-    return events, context, (first_ts, last_ts)
+    return {"events": events, "disk": disk, "net": net, "incidents": incidents,
+            "context": context, "first_ts": first_ts, "last_ts": last_ts}
 
 
 def _pct(sorted_vals: list[float], q: float) -> Optional[float]:
@@ -196,8 +307,10 @@ def collect(window_hours: float, now: Optional[float] = None) -> dict:
     import time as _time
 
     now = now if now is not None else _time.time()
-    lines = _tail_lines()
-    events, context, (first_ts, last_ts) = parse_events(lines)
+    lines = _lines_covering(now - window_hours * 3600)
+    parsed = parse_all(lines)
+    events, context = parsed["events"], parsed["context"]
+    first_ts, last_ts = parsed["first_ts"], parsed["last_ts"]
 
     cutoff = now - window_hours * 3600
     in_window = [e for e in events if e["epoch"] >= cutoff]
@@ -216,6 +329,19 @@ def collect(window_hours: float, now: Optional[float] = None) -> dict:
     gc = summarise(in_window, "gc", span_hours)
     blocked_ms = save["total_ms"] + gc["total_ms"]
 
+    # The findings are the point of the endpoint: numbers become a judgement
+    # about hardware, network or configuration, each carrying the evidence that
+    # produced it. Everything below the cutoff is dropped first so a finding
+    # never quotes data from outside the window it claims to describe.
+    _in = lambda rows: [r for r in rows if r["epoch"] >= cutoff]
+    findings = _findings.compute(
+        saves=[e for e in in_window if e["kind"] == "save"],
+        gcs=[e for e in in_window if e["kind"] == "gc"],
+        disk=_in(parsed["disk"]), net=_in(parsed["net"]),
+        incidents=_in(parsed["incidents"]),
+        span_hours=span_hours, interval_s=settings.save_interval,
+    )
+
     return {
         "generated_at": now,
         "window_hours": window_hours,
@@ -232,4 +358,6 @@ def collect(window_hours: float, now: Optional[float] = None) -> dict:
         "blocked_pct": round(100 * blocked_ms / (span_hours * 3600_000), 4) if span_hours > 0 else None,
         "save_interval_s": settings.save_interval,
         "context": context,
+        "findings": findings,
+        "log_files_read": len(_rotated_logs(cutoff)) + 1,
     }

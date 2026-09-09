@@ -103,7 +103,7 @@ def test_rate_is_over_observed_span_not_requested_window(monkeypatch):
     """The bug this guards: dividing 2 saves by a 6h window gives 0.33/hour for
     a server that has actually been up 30 minutes and saved twice — a 36x
     understatement, and the console would report a stall problem as absent."""
-    monkeypatch.setattr(perf, "_tail_lines", lambda n=perf.MAX_TAIL_LINES: REAL_LOG)
+    monkeypatch.setattr(perf, "_lines_covering", lambda start, budget=0: REAL_LOG)
     out = perf.collect(6.0, now=_epoch("09/09/2026 11:00:00"))
     assert out["observed_hours"] == pytest.approx(0.5030555, abs=1e-4)
     assert out["save"]["count"] == 2
@@ -111,7 +111,7 @@ def test_rate_is_over_observed_span_not_requested_window(monkeypatch):
 
 
 def test_events_outside_the_window_are_excluded(monkeypatch):
-    monkeypatch.setattr(perf, "_tail_lines", lambda n=perf.MAX_TAIL_LINES: REAL_LOG)
+    monkeypatch.setattr(perf, "_lines_covering", lambda start, budget=0: REAL_LOG)
     out = perf.collect(0.25, now=_epoch("09/09/2026 11:00:00"))
     assert out["save"]["count"] == 1  # only the 10:55 one is inside 15 minutes
 
@@ -120,7 +120,7 @@ def test_no_data_reports_unknown_not_zero(monkeypatch):
     """`0 stalls per hour` and `we cannot say` are different claims. A console
     that renders the second as the first tells the operator hardware is ruled
     out when nothing was measured."""
-    monkeypatch.setattr(perf, "_tail_lines", lambda n=perf.MAX_TAIL_LINES: [])
+    monkeypatch.setattr(perf, "_lines_covering", lambda start, budget=0: [])
     out = perf.collect(6.0)
     assert out["save"]["count"] == 0
     assert out["save"]["per_hour"] is None
@@ -133,7 +133,7 @@ def test_endpoint_is_key_gated(monkeypatch):
     key like everything else, not open like /metrics."""
     from api.auth import require_api_key
 
-    monkeypatch.setattr(perf, "_tail_lines", lambda n=perf.MAX_TAIL_LINES: REAL_LOG)
+    monkeypatch.setattr(perf, "_lines_covering", lambda start, budget=0: REAL_LOG)
     app.dependency_overrides.pop(require_api_key, None)
     try:
         assert TestClient(app).get("/v1/performance").status_code == 401
@@ -142,7 +142,7 @@ def test_endpoint_is_key_gated(monkeypatch):
 
 
 def test_endpoint_answers_under_v1(monkeypatch):
-    monkeypatch.setattr(perf, "_tail_lines", lambda n=perf.MAX_TAIL_LINES: REAL_LOG)
+    monkeypatch.setattr(perf, "_lines_covering", lambda start, budget=0: REAL_LOG)
     c = TestClient(app)
     r = c.get("/v1/performance?hours=24")
     assert r.status_code == 200
