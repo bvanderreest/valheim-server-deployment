@@ -18,10 +18,14 @@ class Settings(BaseSettings):
 
     # CORS — comma-separated origins (e.g. "https://dashboard.example.com").
     # No default: operators must explicitly allow their dashboard origin.
+    # "*" is REJECTED at startup — see cors_origins_list. Auth is a header, not
+    # a cookie, so credentialed CORS is never needed here.
     cors_origins: str = ""
 
-    # Set to true to expose /docs and /redoc (disable in production)
-    api_docs_enabled: bool = False
+    # Gates /docs, /redoc AND /openapi.json together (#79). Defaults ON: this is
+    # a self-hosted admin API behind an API key, and discoverability is a feature.
+    # Set false to hide all three.
+    api_docs_enabled: bool = True
 
     # Server identity (shown in every response so the dashboard knows which server this is)
     server_type: str = "valheim"

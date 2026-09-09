@@ -1,0 +1,100 @@
+"""Tests for the public-repo hardening: CORS, docs gating, route versioning.
+
+Covers #78, #79, #80. Each asserts BOTH directions where that is meaningful —
+a gate that is only ever tested in its permissive state is not a gate.
+"""
+import importlib
+
+import pytest
+from fastapi.testclient import TestClient
+
+from api.auth import require_api_key
+from api.main import app
+
+TEST_KEY = "test-api-key"
+app.dependency_overrides[require_api_key] = lambda: TEST_KEY
+client = TestClient(app)
+HEADERS = {"X-API-Key": TEST_KEY}
+
+
+# ─── #80 route versioning ────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("path", ["/status", "/capabilities", "/config", "/mods", "/modifiers"])
+def test_v1_and_bare_paths_both_resolve(path):
+    """Legacy bare paths must keep working alongside /v1."""
+    bare = client.get(path, headers=HEADERS)
+    v1 = client.get(f"/v1{path}", headers=HEADERS)
+    assert bare.status_code != 404, f"{path} disappeared"
+    assert v1.status_code != 404, f"/v1{path} not mounted"
+    assert bare.status_code == v1.status_code
+
+
+def test_health_is_not_versioned():
+    """/health is an infrastructure probe, not part of the contract."""
+    assert client.get("/health").status_code == 200
+    assert client.get("/v1/health").status_code == 404
+
+
+def test_v1_requires_auth_too():
+    bare = TestClient(app, raise_server_exceptions=False)
+    app.dependency_overrides.pop(require_api_key, None)
+    try:
+        assert bare.get("/v1/status").status_code == 401
+    finally:
+        app.dependency_overrides[require_api_key] = lambda: TEST_KEY
+
+
+# ─── #79 docs gating ─────────────────────────────────────────────────────────
+
+def test_openapi_is_gated_with_docs(monkeypatch):
+    """The schema must not be served while the UI is hidden. FastAPI does not
+    do this by itself — openapi_url is independent of docs_url."""
+    import api.config as cfg
+    monkeypatch.setattr(cfg.settings, "api_docs_enabled", False)
+    import api.main as m
+    reloaded = importlib.reload(m)
+    c = TestClient(reloaded.app, raise_server_exceptions=False)
+    for p in ("/docs", "/redoc", "/openapi.json"):
+        assert c.get(p).status_code == 404, f"{p} exposed while docs disabled"
+
+
+def test_all_three_present_when_enabled(monkeypatch):
+    import api.config as cfg
+    monkeypatch.setattr(cfg.settings, "api_docs_enabled", True)
+    import api.main as m
+    reloaded = importlib.reload(m)
+    c = TestClient(reloaded.app, raise_server_exceptions=False)
+    for p in ("/docs", "/openapi.json"):
+        assert c.get(p).status_code == 200, f"{p} missing while docs enabled"
+
+
+# ─── #78 CORS ────────────────────────────────────────────────────────────────
+
+def test_wildcard_cors_is_rejected_at_startup(monkeypatch):
+    """'*' + credentials is rejected by every browser; shipping it is a
+    wildcard on an API that can stop and reconfigure the server."""
+    import api.config as cfg
+    monkeypatch.setattr(cfg.settings, "cors_origins", "*")
+    monkeypatch.setattr(cfg.settings, "api_enabled", True)
+    monkeypatch.setattr(cfg.settings, "api_keys", "k" * 16)
+    import api.main as m
+    reloaded = importlib.reload(m)
+    with pytest.raises(RuntimeError, match=r'CORS_ORIGINS.*not allowed'):
+        with TestClient(reloaded.app):
+            pass
+
+
+def test_explicit_origin_is_accepted(monkeypatch):
+    import api.config as cfg
+    monkeypatch.setattr(cfg.settings, "cors_origins", "https://valheim.example.com")
+    assert cfg.settings.cors_origins_list == ["https://valheim.example.com"]
+    assert "*" not in cfg.settings.cors_origins_list
+
+
+def test_credentials_are_not_enabled():
+    """Auth is a header, so credentialed CORS buys nothing and is what makes a
+    wildcard dangerous."""
+    from starlette.middleware.cors import CORSMiddleware
+    cors = [m for m in app.user_middleware if m.cls is CORSMiddleware]
+    assert cors, "CORS middleware missing"
+    assert cors[0].kwargs.get("allow_credentials") is False
