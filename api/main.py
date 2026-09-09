@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .auth import require_api_key
 from .config import settings
@@ -97,3 +99,19 @@ for _r in (server_router, config_router, modifiers_router, mods_router, logs_rou
 app.include_router(metrics_router, prefix=_V1)
 # /metrics is unauthenticated — consumable by Prometheus/Grafana without API key
 app.include_router(metrics_router)
+
+
+# ── Web console (#33) ─────────────────────────────────────────────────────────
+# Served from the same origin as the API, which is the point: no CORS, no second
+# process, and the browser sends the key to the host it loaded from. The page
+# itself is public — it is only markup. Everything it can DO still needs the
+# X-API-Key, enforced per route.
+_STATIC_DIR = Path(__file__).parent / "static"
+_CONSOLE = _STATIC_DIR / "index.html"
+
+if _CONSOLE.is_file():
+    @app.get("/", include_in_schema=False)
+    async def console() -> FileResponse:
+        # no-store: the console changes with the API it talks to, and a stale
+        # cached copy is worse than a slow load.
+        return FileResponse(_CONSOLE, headers={"Cache-Control": "no-store"})

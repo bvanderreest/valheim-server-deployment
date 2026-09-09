@@ -1,0 +1,1173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Hugin</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Averia+Serif+Libre:wght@400;700&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#eef0eb; --surface:#f8f9f6; --surface-2:#e6e9e2; --inset:#dde1d8;
+  --line:#d1d6cc; --line-strong:#7c8877;
+  --ink:#1a1e1b; --ink-2:#4b524d; --ink-3:#636a65;
+  --accent:#935c0c; --accent-fill:#c98a2a; --accent-soft:#f2e6cd; --accent-line:#dcbf8a;
+  --good:#2e7733; --good-soft:#dfecdb;
+  --danger:#b3362e; --danger-soft:#f4dfdc; --danger-line:#e3b3ad;
+  --on-fill:#fbfaf6;
+  --shadow:0 12px 32px rgba(22,30,24,.16), 0 1px 2px rgba(22,30,24,.08);
+  --ease-out:cubic-bezier(.23,1,.32,1); --ease-in-out:cubic-bezier(.77,0,.175,1);
+  --font:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-name:"Averia Serif Libre",Georgia,"Times New Roman",serif;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#111412; --surface:#191d1a; --surface-2:#232825; --inset:#0d100e;
+    --line:#2b312d; --line-strong:#67736a;
+    --ink:#eceee9; --ink-2:#aab1aa; --ink-3:#888f89;
+    --accent:#e3a93f; --accent-fill:#d59a2f; --accent-soft:#2f2617; --accent-line:#5e4a22;
+    --good:#6fb36a; --good-soft:#1b2a1c;
+    --danger:#e1685f; --danger-soft:#33201e; --danger-line:#5b2f2b;
+    --on-fill:#151713;
+    --shadow:0 16px 40px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111412; --surface:#191d1a; --surface-2:#232825; --inset:#0d100e;
+  --line:#2b312d; --line-strong:#67736a;
+  --ink:#eceee9; --ink-2:#aab1aa; --ink-3:#888f89;
+  --accent:#e3a93f; --accent-fill:#d59a2f; --accent-soft:#2f2617; --accent-line:#5e4a22;
+  --good:#6fb36a; --good-soft:#1b2a1c;
+  --danger:#e1685f; --danger-soft:#33201e; --danger-line:#5b2f2b;
+  --on-fill:#151713;
+  --shadow:0 16px 40px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.4);
+}
+
+*{box-sizing:border-box}
+/* WCAG 2.2 SC 2.4.11 Focus Not Obscured (Minimum): the launch-args dock is
+   position:fixed at the bottom, so a control focused by keyboard could be
+   scrolled to sit behind it. Reserve that space in the scroll container. */
+html{scroll-padding-bottom:120px}
+.work{scroll-padding-bottom:120px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14px/1.45 var(--font);min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+::selection{background:var(--accent-soft)}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance}
+p{margin:0}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-2)}
+.faint{color:var(--ink-3)}
+.mono{font-family:var(--mono);font-size:12.5px}
+
+/* ---------- top bar ---------- */
+.top{display:flex;align-items:center;gap:20px;padding:0 20px;height:52px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:baseline;gap:10px;font-weight:600;font-size:15px;letter-spacing:-.01em}
+.brand small{font-weight:400;color:var(--ink-3);font-size:12.5px}
+.nav{display:flex;gap:2px;margin-left:8px;overflow-x:auto;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav button{background:none;border:0;padding:7px 11px;border-radius:6px;color:var(--ink-2);font-weight:500;white-space:nowrap;transition:color 120ms ease,background-color 120ms ease}
+.nav button[aria-current="page"]{color:var(--ink);background:var(--surface-2)}
+@media (hover:hover) and (pointer:fine){.nav button:hover{color:var(--ink)}}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:7px;padding:2px;background:var(--bg)}
+.seg button{border:0;background:none;padding:4px 9px;border-radius:5px;font-size:12.5px;color:var(--ink-2);transition:background-color 120ms ease,color 120ms ease}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.iconbtn{border:1px solid var(--line);background:var(--surface);border-radius:7px;padding:5px 9px;font-size:12.5px;color:var(--ink-2);display:inline-flex;gap:6px;align-items:center;transition:transform 160ms var(--ease-out),border-color 120ms ease}
+.iconbtn:active{transform:scale(.97)}
+
+/* ---------- frame ---------- */
+.frame{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 52px)}
+.rail{border-right:1px solid var(--line);padding:22px 20px 28px;background:var(--surface);position:sticky;top:52px;height:calc(100vh - 52px);overflow:auto;display:flex;flex-direction:column;gap:22px}
+.work{padding:26px 28px 120px;min-width:0}
+.view{display:none;max-width:880px}
+.view[data-active]{display:block}
+.view-head{margin-bottom:20px;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.view-head h1{font-size:20px;letter-spacing:-.01em}
+.view-head p{color:var(--ink-2);max-width:60ch;margin-top:3px}
+
+/* ---------- nameplate / rail ---------- */
+.plate .name{font-family:var(--font-name);font-size:30px;line-height:1.1;font-weight:700;letter-spacing:-.005em}
+.plate .world{font-family:var(--font-name);font-size:17px;color:var(--ink-2);margin-top:2px}
+.state{display:flex;align-items:center;gap:8px;margin-top:12px;font-weight:500}
+.dot{width:9px;height:9px;border-radius:50%;background:var(--ink-3);flex:none;position:relative}
+.dot.on{background:var(--good)}
+.dot.off{background:var(--danger)}
+.dot.busy{background:var(--accent-fill)}
+.dot.busy::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--accent-fill);opacity:.5;animation:ring 1.4s var(--ease-out) infinite}
+@keyframes ring{from{transform:scale(.6);opacity:.7}to{transform:scale(1.5);opacity:0}}
+.state small{color:var(--ink-3);font-weight:400}
+
+.join{border:1px solid var(--line);border-radius:10px;padding:12px 14px 12px;background:var(--bg)}
+.join .lbl{font-size:12.5px;color:var(--ink-2);display:flex;justify-content:space-between;align-items:center}
+.join .code{font-size:38px;font-weight:600;letter-spacing:.04em;line-height:1.1;margin-top:4px;display:flex;align-items:center;gap:10px;font-variant-numeric:tabular-nums}
+.join .code span{letter-spacing:.06em}
+.join .code .gap{width:.35em}
+.join .copy{margin-left:auto;font-size:12.5px}
+.join .flag{margin-top:8px;padding:7px 9px;border-radius:6px;background:var(--accent-soft);color:var(--ink);font-size:12.5px;display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid var(--accent-line)}
+.join .flag[hidden]{display:none}
+.join .flag button{border:0;background:none;color:var(--accent);font-weight:600;padding:0}
+.join .note{font-size:12px;color:var(--ink-3);margin-top:8px}
+
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13px}
+.facts dt{color:var(--ink-2)}
+.facts dd{margin:0;text-align:right;font-variant-numeric:tabular-nums}
+.facts dd .weak{color:var(--ink-3)}
+
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:9px 12px;font-weight:500;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform 160ms var(--ease-out),background-color 120ms ease,border-color 120ms ease;white-space:nowrap;text-align:center}
+.btn:active{transform:scale(.97)}
+.btn[disabled]{opacity:.45;cursor:not-allowed;transform:none}
+.btn.primary{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.btn.accent{background:var(--accent-fill);color:var(--on-fill);border-color:var(--accent-fill)}
+.btn.danger{color:var(--danger);border-color:var(--danger-line)}
+.btn.wide{grid-column:1/-1}
+.btn.sm{padding:6px 10px;font-size:12.5px;border-radius:6px}
+@media (hover:hover) and (pointer:fine){.btn:not([disabled]):hover{background:var(--surface-2)}.btn.primary:not([disabled]):hover{background:var(--ink-2)}.btn.accent:not([disabled]):hover{background:var(--accent)}}
+.link{border:0;background:none;padding:0;color:var(--accent);font-weight:500;font-size:12.5px;text-decoration:underline;text-underline-offset:2px;text-decoration-color:var(--accent-line)}
+
+.pending{border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:8px;padding:10px 12px;font-size:13px;display:none;gap:4px;flex-direction:column}
+.pending[data-show]{display:flex}
+.pending b{font-weight:600}
+.pending .elapsed{color:var(--ink-2)}
+.restart-needed{border:1px solid var(--accent-line);background:var(--accent-soft);border-radius:8px;padding:10px 12px;font-size:13px;display:none;align-items:center;gap:10px;justify-content:space-between}
+.restart-needed[data-show]{display:flex}
+
+/* ---------- overview ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.panel{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:18px 20px}
+.panel h2{font-size:15px;margin-bottom:12px}
+.panel h2 small{font-weight:400;color:var(--ink-3);margin-left:8px;font-size:12.5px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:8px 16px;font-size:13.5px}
+.kv dt{color:var(--ink-2)}
+.kv dd{margin:0;font-variant-numeric:tabular-nums;text-align:right}
+.meter{margin-top:14px}
+.meter .row{display:flex;justify-content:space-between;font-size:12.5px;color:var(--ink-2);margin-bottom:6px}
+.meter .track{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden}
+.meter .fill{height:100%;border-radius:3px;background:var(--good);width:0}
+.players-empty{color:var(--ink-3);font-size:13px;margin-top:6px}
+.player{display:flex;align-items:center;gap:8px;padding:6px 0;border-top:1px solid var(--line)}
+
+.update{border:1px solid var(--accent-line);background:var(--surface);border-radius:12px;padding:18px 20px;grid-column:1/-1}
+.update h2{font-size:16px}
+.update .lede{margin:6px 0 12px;max-width:62ch;color:var(--ink-2)}
+.consequences{margin:0 0 14px;padding:0;list-style:none;display:grid;gap:6px;max-width:62ch}
+.consequences li{display:grid;grid-template-columns:16px 1fr;gap:8px;align-items:start}
+.consequences li::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent-fill);margin-top:6px}
+.consequences li.hard::before{background:var(--danger)}
+.ack{display:flex;gap:10px;align-items:flex-start;margin-bottom:12px;font-size:13.5px}
+.ack input{margin-top:3px;accent-color:var(--accent)}
+
+/* hold-to-confirm */
+.hold{position:relative;overflow:hidden;user-select:none;-webkit-user-select:none;touch-action:none}
+.hold .fillbar{position:absolute;inset:0;background:var(--danger);clip-path:inset(0 100% 0 0);transition:clip-path 200ms var(--ease-out);pointer-events:none}
+.hold.accent-hold .fillbar{background:var(--accent)}
+.hold.holding .fillbar{clip-path:inset(0 0 0 0);transition:clip-path 2000ms linear}
+.hold .txt{position:relative;z-index:1}
+.hold.holding .txt{color:var(--on-fill)}
+.hold.done .fillbar{clip-path:inset(0 0 0 0);transition:none}
+.hold-hint{font-size:12px;color:var(--ink-3);margin-top:8px}
+
+/* ---------- difficulty ---------- */
+.strata{display:grid;gap:26px}
+.stratum{display:grid;grid-template-columns:150px 1fr;gap:20px;padding-top:18px;border-top:1px solid var(--line)}
+.stratum-label h2{font-size:15px}
+.stratum-label p{font-size:12.5px;color:var(--ink-2);margin-top:4px;line-height:1.4}
+.stratum-label .applies{font-size:11.5px;color:var(--ink-3);margin-top:8px;font-family:var(--mono)}
+
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button{border:1px solid var(--line-strong);background:var(--surface);border-radius:999px;padding:6px 13px;font-weight:500;transition:transform 160ms var(--ease-out),background-color 120ms ease,border-color 120ms ease,color 120ms ease}
+.presets button:active{transform:scale(.97)}
+.presets button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.presets button.none{color:var(--ink-2);font-style:italic}
+.preset-note{font-size:12.5px;color:var(--ink-2);margin-top:10px;max-width:62ch}
+
+.mods{display:grid;gap:10px}
+.mod{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:12px 16px 12px}
+.mod.over{border-color:var(--accent-line)}
+.mod-head{display:flex;align-items:baseline;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.mod-name{font-weight:600}
+.mod-meta{font-size:12.5px;color:var(--ink-2)}
+.mod-meta b{font-weight:600;color:var(--ink)}
+.mod-head .link{margin-left:auto}
+.ordrail{position:relative;height:46px;margin:0 34px}
+.ordrail-line{position:absolute;left:0;right:0;top:11px;height:2px;background:var(--line-strong);border-radius:1px}
+.ordrail-delta{position:absolute;top:9px;height:6px;background:var(--accent-fill);border-radius:3px}
+.stop{position:absolute;top:0;transform:translateX(-50%);background:none;border:0;padding:0;width:56px;display:flex;flex-direction:column;align-items:center;gap:6px;color:var(--ink-3);font-size:11.5px;line-height:1.1;white-space:nowrap;border-radius:4px}
+.stop .pip{width:24px;height:24px;display:grid;place-items:center}
+.stop .pip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--surface);border:2px solid var(--line-strong);transition:transform 160ms var(--ease-out),background-color 120ms ease,border-color 120ms ease}
+.stop.base .pip::before{border-color:var(--ink);width:12px;height:12px}
+.stop[aria-checked="true"] .pip::before{background:var(--accent-fill);border-color:var(--accent-fill);width:12px;height:12px}
+.stop[aria-checked="true"]{color:var(--ink);font-weight:600}
+.stop.base{color:var(--ink-2)}
+.stop.base[aria-checked="true"] .pip::before{background:var(--accent-fill);border-color:var(--ink)}
+@media (hover:hover) and (pointer:fine){.stop:hover .pip::before{transform:scale(1.25)}}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-top:4px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid var(--ink);background:var(--surface)}
+.legend i.fill{background:var(--accent-fill);border-color:var(--accent-fill)}
+.legend i.bar{width:18px;height:5px;border-radius:3px;background:var(--accent-fill);border:0}
+
+.toggles{display:grid;gap:14px}
+.tgroup h3{font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px}
+.tlist{border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.trow{display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line)}
+.trow:first-child{border-top:0}
+.trow .k{font-family:var(--mono);font-size:12.5px}
+.trow .d{font-size:12.5px;color:var(--ink-2);margin-top:1px}
+.trow.perm{background:var(--danger-soft)}
+.trow.perm .perm-tag{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;color:var(--danger);font-weight:600;margin-left:8px;font-family:var(--font)}
+.trow.perm .perm-tag::before{content:"";width:7px;height:7px;background:var(--danger);border-radius:1px;transform:rotate(45deg)}
+.trow.perm.locked .d{color:var(--danger)}
+.switch{position:relative;width:42px;height:24px;border-radius:12px;background:var(--line-strong);border:0;padding:0;transition:background-color 160ms ease;flex:none}
+.switch::after{content:"";position:absolute;top:4px;left:4px;width:16px;height:16px;border-radius:50%;background:var(--surface);transition:transform 160ms var(--ease-out);box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.switch[aria-checked="true"]{background:var(--accent-fill)}
+.switch[aria-checked="true"]::after{transform:translateX(16px)}
+.trow.perm .switch[aria-checked="true"]{background:var(--danger)}
+.switch[disabled]{cursor:not-allowed;opacity:.6}
+
+.nums{display:grid;gap:8px}
+.numrow{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 16px 8px;display:grid;grid-template-columns:1fr 84px;gap:4px 16px;align-items:center}
+.numrow.dev{border-color:var(--accent-line)}
+.numrow .head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.numrow .k{font-weight:600}
+.numrow .d{font-size:12px;color:var(--ink-3);margin-left:8px;font-weight:400}
+.numrow .v{font-size:13px;font-variant-numeric:tabular-nums;color:var(--ink-2)}
+.numrow .v b{color:var(--ink);font-weight:600}
+.ntrack{position:relative;height:36px;margin:0 6px}
+.ntrack .line{position:absolute;left:0;right:0;top:9px;height:2px;background:var(--line-strong);border-radius:1px}
+.ntrack .center{position:absolute;left:50%;top:4px;width:2px;height:12px;background:var(--ink);transform:translateX(-50%)}
+.ntrack .fill{position:absolute;top:7px;height:6px;background:var(--accent-fill);border-radius:3px}
+.ntrack .thumb{position:absolute;top:3px;width:14px;height:14px;border-radius:50%;background:var(--surface);border:2px solid var(--ink);transform:translateX(-50%);pointer-events:none;box-shadow:0 0 0 2px var(--surface)}
+.numrow.dev .ntrack .thumb{border-color:var(--accent-fill)}
+.ntrack .tick{position:absolute;top:22px;transform:translateX(-50%);font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.ntrack input[type=range]{position:absolute;left:-7px;right:-7px;top:0;width:calc(100% + 14px);height:20px;margin:0;opacity:0;cursor:pointer}
+.ntrack input[type=range]:focus-visible + .thumb{outline:2px solid var(--accent);outline-offset:3px}
+.numrow input[type=number]{width:84px;grid-row:1/3;border:1px solid var(--line-strong);border-radius:7px;padding:7px 8px;background:var(--bg);font-variant-numeric:tabular-nums;text-align:right;-moz-appearance:textfield}
+.numrow input[type=number]::-webkit-inner-spin-button{opacity:1}
+
+/* readout bar */
+.readout{position:fixed;left:300px;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding:12px 28px;display:none;gap:14px;align-items:center;z-index:15;box-shadow:0 -8px 24px rgba(0,0,0,.06)}
+.readout[data-show]{display:flex}
+.readout .cmd{flex:1;min-width:0;font-family:var(--mono);font-size:12.5px;line-height:1.5;white-space:normal;overflow-wrap:anywhere;max-height:4.5em;overflow-y:auto;color:var(--ink-2);scrollbar-width:thin}
+.readout .cmd b{color:var(--ink);font-weight:500}
+.readout .cmd .chg{background:var(--accent-soft);color:var(--ink);border-radius:3px;padding:0 3px}
+.readout .cmd .none{color:var(--ink-3);font-style:italic;font-family:var(--font)}
+.readout .lbl{font-size:11.5px;color:var(--ink-3);margin-bottom:2px;font-family:var(--font)}
+.readout .acts{display:flex;gap:8px;flex:none}
+.readout .dirty{font-size:12.5px;color:var(--ink-2);white-space:nowrap}
+
+/* ---------- settings ---------- */
+.form{display:grid;gap:14px;max-width:560px}
+.field{display:grid;grid-template-columns:160px 1fr;gap:12px;align-items:center}
+.field label{font-weight:500;font-size:13.5px}
+.field .hint{grid-column:2;font-size:12px;color:var(--ink-3);margin-top:-8px}
+.input{border:1px solid var(--line-strong);border-radius:7px;padding:8px 10px;background:var(--bg);width:100%}
+.input:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-color:transparent}
+.inrow{display:flex;gap:8px;align-items:center}
+.inrow .input{flex:1}
+.needs{font-size:11.5px;color:var(--accent);font-weight:600;margin-left:6px}
+.form-foot{display:flex;gap:10px;align-items:center;margin-top:6px}
+
+/* ---------- logs ---------- */
+.logbox{border:1px solid var(--line);border-radius:10px;background:var(--inset);padding:12px 14px;font-family:var(--mono);font-size:12px;line-height:1.55;height:60vh;min-height:280px;overflow:auto;color:var(--ink-2);white-space:pre-wrap;word-break:break-word}
+.logbox .ln{display:block}
+.logbox .ln.warn{color:var(--accent)}
+.logbox .ln.err{color:var(--danger)}
+.logbox .ln b{color:var(--ink);font-weight:500}
+.logtools{display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);border:1px solid var(--line);border-radius:999px;padding:3px 9px}
+.pill .dot{width:7px;height:7px}
+
+/* ---------- mods ---------- */
+.empty{border:1px dashed var(--line-strong);border-radius:12px;padding:32px 24px;text-align:left;max-width:560px}
+.empty h2{font-size:16px}
+.empty p{color:var(--ink-2);margin-top:6px;max-width:52ch}
+.empty .inrow{margin-top:16px}
+.modlist{display:grid;gap:8px;max-width:640px;margin-bottom:16px}
+.modrow{border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px 14px;display:flex;align-items:center;gap:12px}
+.modrow .n{font-weight:600}
+.modrow .id{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+.modrow .acts{margin-left:auto;display:flex;gap:6px}
+.callout{border-left:3px solid var(--accent-fill);padding:8px 12px;background:var(--surface);border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-2);max-width:60ch;margin-top:16px}
+
+/* ---------- lock ---------- */
+.lock{position:fixed;inset:0;background:var(--bg);z-index:50;display:grid;place-items:center;padding:20px}
+.lock[hidden]{display:none}
+.lockcard{width:min(420px,100%);border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:26px 26px 22px;box-shadow:var(--shadow)}
+.lockcard .name{font-family:var(--font-name);font-size:28px;font-weight:700;line-height:1.1}
+.lockcard .reach{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-2);margin-top:8px}
+.lockcard h1{font-size:15px;margin-top:22px}
+.lockcard .form{margin-top:12px;gap:12px}
+.lockcard .field{grid-template-columns:1fr}
+.lockcard .input{font-family:var(--mono);font-size:13px;letter-spacing:.02em}
+.remember{display:flex;gap:9px;align-items:flex-start;font-size:13px}
+.remember input{margin-top:2px;accent-color:var(--accent)}
+.remember span small{display:block;color:var(--ink-3);margin-top:2px}
+.err{display:none;border:1px solid var(--danger-line);background:var(--danger-soft);border-radius:8px;padding:9px 12px;font-size:13px;color:var(--ink)}
+.err[data-show]{display:block}
+.err b{color:var(--danger);font-weight:600}
+.lockfoot{font-size:12px;color:var(--ink-3);margin-top:16px;line-height:1.45}
+.demo{font-size:12px;color:var(--ink-3);margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+
+/* ---------- dialog ---------- */
+dialog{border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:14px;padding:0;width:min(520px,calc(100vw - 32px));box-shadow:var(--shadow);transform-origin:center}
+dialog::backdrop{background:rgba(10,14,11,.55)}
+dialog[open]{animation:dlg 250ms var(--ease-out)}
+@keyframes dlg{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.dlg{padding:22px 24px 20px}
+.dlg h2{font-size:17px;margin-bottom:8px}
+.dlg .body{color:var(--ink-2);font-size:13.5px;line-height:1.5}
+.dlg .body p+p{margin-top:8px}
+.dlg .body ul{margin:8px 0 0;padding-left:18px}
+.dlg .body li+li{margin-top:3px}
+.dlg .perm-block{border:1px solid var(--danger-line);background:var(--danger-soft);border-radius:8px;padding:10px 12px;margin-top:12px;color:var(--ink)}
+.dlg .perm-block b{color:var(--danger)}
+.dlg .perm-block code{font-family:var(--mono);font-size:12.5px}
+.dlg .foot{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+.dlg .foot .hold-hint{width:100%;text-align:right;margin-top:2px}
+.diff{margin:10px 0 0;padding:0;list-style:none;display:grid;gap:4px;font-size:13px}
+.diff li{display:grid;grid-template-columns:150px 1fr;gap:10px}
+.diff li span:first-child{color:var(--ink-2);font-family:var(--mono);font-size:12px}
+.diff .arrow{color:var(--ink-3)}
+
+/* ---------- toasts ---------- */
+.toasts{position:fixed;right:16px;bottom:16px;display:grid;gap:8px;z-index:60;max-width:min(380px,calc(100vw - 32px))}
+.toast{background:var(--ink);color:var(--bg);border-radius:9px;padding:10px 14px;font-size:13px;box-shadow:var(--shadow);opacity:1;transform:translateY(0);transition:opacity 400ms ease,transform 400ms ease}
+.toast.out{opacity:0;transform:translateY(8px)}
+@starting-style{.toast{opacity:0;transform:translateY(100%)}}
+
+/* ---------- responsive ---------- */
+@media (max-width:900px){
+  .frame{grid-template-columns:1fr}
+  .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:18px 16px 20px}
+  .work{padding:20px 16px 150px}
+  .readout{left:0;padding:10px 16px;flex-wrap:wrap}
+  .readout .acts{width:100%;justify-content:flex-end}
+  .grid2{grid-template-columns:1fr}
+  .stratum{grid-template-columns:1fr;gap:10px}
+  .field{grid-template-columns:1fr;gap:6px}
+  .field .hint{grid-column:1;margin-top:0}
+  .top{padding:0 12px;gap:10px}
+  .brand small{display:none}
+  .seg button{padding:4px 7px}
+  .numrow{grid-template-columns:1fr 76px}
+  .stop{width:48px;font-size:10.5px}
+}
+@media (max-width:560px){
+  .actions{grid-template-columns:1fr 1fr}
+  .join .code{font-size:34px}
+  .readout .dirty{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{transition-duration:0ms!important;animation-duration:0ms!important}
+  .hold.holding .fillbar{transition:clip-path 2000ms linear!important}
+  .dot.busy::after{animation:none;opacity:.35;transform:none}
+}
+</style>
+</head>
+<body>
+
+<!-- ============ LOCK ============ -->
+<div class="lock" id="lock">
+  <div class="lockcard">
+    <div class="name" id="lock-name">Lowood-AU</div>
+    <div class="reach" id="lock-reach"><span class="dot"></span><span>Checking that the server is reachable…</span></div>
+    <h1>Unlock the console</h1>
+    <form class="form" id="lock-form" novalidate>
+      <div class="field">
+        <label for="key">API key</label>
+        <div class="inrow">
+          <input class="input" id="key" type="password" autocomplete="off" spellcheck="false" value="demo-key-1234" placeholder="Paste the key from the server's .env" required>
+          <button type="button" class="btn sm" id="key-reveal" aria-pressed="false">Show</button>
+        </div>
+      </div>
+      <label class="remember"><input type="checkbox" id="remember" checked><span>Remember on this device<small>Stored in this browser only. Anyone with this browser gets full control.</small></span></label>
+      <div class="err" id="lock-err" role="alert"></div>
+      <div><button class="btn primary" type="submit" id="unlock-btn">Unlock</button></div>
+    </form>
+    <p class="lockfoot">This key grants full control of the server — start, stop, update, and change the world's rules. It is sent as <span class="mono">X-API-Key</span> on every request.</p>
+    <p class="demo"><b>Demo build — the key is already filled in.</b> Press Unlock. The API is mocked in this page; the field is pre-set to <span class="mono">demo-key-1234</span>. Any key of 12+ characters works; shorter ones show the real 401 so you can see that path.</p>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<header class="top">
+  <div class="brand">Hugin <small>server console</small></div>
+  <nav class="nav" aria-label="Views">
+    <button data-nav="overview" aria-current="page">Overview</button>
+    <button data-nav="difficulty">Difficulty</button>
+    <button data-nav="settings">Settings</button>
+    <button data-nav="logs">Logs</button>
+    <button data-nav="mods">Mods</button>
+  </nav>
+  <div class="top-right">
+    <div class="seg" role="group" aria-label="Theme">
+      <button data-theme-set="light" aria-pressed="false">Light</button>
+      <button data-theme-set="dark" aria-pressed="false">Dark</button>
+      <button data-theme-set="system" aria-pressed="true">System</button>
+    </div>
+    <button class="iconbtn" id="lock-btn" title="Forget the key on this device and lock">Lock</button>
+  </div>
+</header>
+
+<div class="frame">
+  <aside class="rail" aria-label="Server state">
+    <div class="plate">
+      <div class="name" id="r-name">Lowood-AU</div>
+      <div class="world" id="r-world">CrowsNest</div>
+      <div class="state"><span class="dot" id="r-dot"></span><span id="r-state">Checking…</span><small id="r-uptime"></small></div>
+    </div>
+
+    <div class="pending" id="r-pending"></div>
+    <div class="restart-needed" id="r-restart"><span>Saved changes wait for a restart.</span><button class="btn sm" data-action="restart">Restart</button></div>
+
+    <div class="join">
+      <div class="lbl"><span>Join code</span><span class="faint">changes on every restart</span></div>
+      <div class="code num" id="r-code"><span>366</span><span class="gap"></span><span>974</span><button class="link copy" id="copy-code" type="button">Copy</button></div>
+      <div class="flag" id="r-codeflag" hidden><span>New since you last looked.</span><button type="button" id="ack-code">Got it</button></div>
+      <div class="note" id="r-conn">Port 2456 · crossplay on · public</div>
+    </div>
+
+    <dl class="facts">
+      <dt>Players</dt><dd id="r-players">0 <span class="weak">of 10</span></dd>
+      <dt>Version</dt><dd id="r-version" class="mono">l-0.221.12</dd>
+      <dt>Last save</dt><dd id="r-save">—</dd>
+      <dt>Process</dt><dd id="r-pid">—</dd>
+    </dl>
+
+    <div class="actions" id="rail-actions">
+      <button class="btn" data-action="start">Start</button>
+      <button class="btn" data-action="stop">Stop</button>
+      <button class="btn" data-action="restart">Restart</button>
+      <button class="btn" data-action="backup">Back up now</button>
+    </div>
+  </aside>
+
+  <main class="work">
+    <!-- ---------- OVERVIEW ---------- -->
+    <section class="view" data-view="overview" data-active>
+      <div class="view-head"><div><h1>Overview</h1><p>What the server is doing right now, from <span class="mono">/status</span>.</p></div></div>
+      <div class="grid2">
+        <div class="panel">
+          <h2>Players <small id="o-count">0 online</small></h2>
+          <div id="o-players"></div>
+          <div class="meter"><div class="row"><span>Slots</span><span class="num" id="o-slots">0 / 10</span></div><div class="track"><div class="fill" id="o-slotfill"></div></div></div>
+        </div>
+        <div class="panel">
+          <h2>World <small>CrowsNest</small></h2>
+          <dl class="kv" id="o-world"></dl>
+        </div>
+        <div class="panel">
+          <h2>Process</h2>
+          <dl class="kv" id="o-proc"></dl>
+        </div>
+        <div class="panel">
+          <h2>Rules in force <small>from <span class="mono">/modifiers</span></small></h2>
+          <div id="o-rules" class="muted" style="font-size:13.5px;line-height:1.6"></div>
+          <div style="margin-top:10px"><button class="link" data-nav="difficulty">Open the difficulty editor</button></div>
+        </div>
+
+        <div class="update">
+          <h2>Valheim 1.0 “Deep North” releases tomorrow, 9 September</h2>
+          <p class="lede">Updating is not a background job. Here is exactly what <span class="mono">update</span> does to Lowood-AU:</p>
+          <ul class="consequences">
+            <li class="hard">Stops the server. Anyone playing is disconnected without warning.</li>
+            <li>Downloads and installs the new build. A few minutes.</li>
+            <li class="hard">Leaves the server stopped. It will not come back on its own — you start it.</li>
+            <li>The join code changes when you start it again. Tell the group.</li>
+            <li>Any mods installed may stop working with a major version.</li>
+          </ul>
+          <label class="ack"><input type="checkbox" id="upd-ack"><span>I know the server will stay stopped until I start it, and I've told the others.</span></label>
+          <button class="btn danger hold" id="upd-btn" disabled><span class="fillbar"></span><span class="txt">Hold to stop and update</span></button>
+          <p class="hold-hint">Press and hold for two seconds. Let go early to cancel.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- DIFFICULTY ---------- -->
+    <section class="view" data-view="difficulty">
+      <div class="view-head"><div><h1>Difficulty</h1><p>Three layers, applied in this order at launch. A preset sets the baseline, modifiers override single categories, world keys are flags written into the save.</p></div></div>
+      <div class="strata">
+        <div class="stratum">
+          <div class="stratum-label"><h2>Preset</h2><p>The baseline. Sets some or all five categories at once.</p><div class="applies">-preset</div></div>
+          <div>
+            <div class="presets" id="presets" role="group" aria-label="Preset"></div>
+            <p class="preset-note" id="preset-note"></p>
+          </div>
+        </div>
+        <div class="stratum">
+          <div class="stratum-label"><h2>Modifiers</h2><p>Override one category at a time. The ring is what the preset would give; the filled dot is what's in force.</p><div class="applies">-modifier</div></div>
+          <div>
+            <div class="mods" id="mods"></div>
+            <div class="legend" style="margin-top:10px"><span><i></i> preset baseline</span><span><i class="fill"></i> in force</span><span><i class="bar"></i> override distance</span></div>
+          </div>
+        </div>
+        <div class="stratum">
+          <div class="stratum-label"><h2>World keys</h2><p>Flags written into CrowsNest's save. Five of them cannot be undone by switching them off again — they are marked.</p><div class="applies">-setkey</div></div>
+          <div class="toggles" id="toggles"></div>
+        </div>
+        <div class="stratum">
+          <div class="stratum-label"><h2>Rates</h2><p>Percent of vanilla. 100 is untouched; the bar shows how far you've moved. Half and double are the same distance from the centre.</p><div class="applies">-setkey &lt;Key&gt; &lt;0–1000&gt;</div></div>
+          <div class="nums" id="nums"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- SETTINGS ---------- -->
+    <section class="view" data-view="settings">
+      <div class="view-head"><div><h1>Settings</h1><p>Server identity and networking. Most of these need a restart to take effect; the ones that don't are marked.</p></div></div>
+      <form class="form" id="cfg-form" novalidate></form>
+    </section>
+
+    <!-- ---------- LOGS ---------- -->
+    <section class="view" data-view="logs">
+      <div class="view-head"><div><h1>Logs</h1><p>Live from <span class="mono">/logs/stream</span>. The server writes its own timestamps.</p></div></div>
+      <div class="logtools">
+        <span class="pill" id="log-pill"><span class="dot on"></span>following</span>
+        <button class="btn sm" id="log-follow" aria-pressed="true">Pause</button>
+        <button class="btn sm" id="log-clear">Clear view</button>
+      </div>
+      <div class="logbox" id="logbox" aria-live="polite" aria-label="Server log"></div>
+    </section>
+
+    <!-- ---------- MODS ---------- -->
+    <section class="view" data-view="mods">
+      <div class="view-head"><div><h1>Mods</h1><p>Server-side mods. Installing one restarts nothing by itself; enable it, then restart.</p></div></div>
+      <div id="mods-view"></div>
+    </section>
+  </main>
+</div>
+
+<div class="readout" id="readout">
+  <div style="flex:1;min-width:0"><div class="lbl">Launch arguments this would produce</div><div class="cmd" id="cmd"></div></div>
+  <span class="dirty" id="dirty"></span>
+  <div class="acts"><button class="btn" id="discard" disabled>Discard</button><button class="btn accent" id="apply" disabled>Apply changes</button></div>
+</div>
+
+<dialog id="dlg"><div class="dlg" id="dlg-body"></div></dialog>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script>
+(() => {
+'use strict';
+const $ = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
+const store = {
+  get(k){ try { return localStorage.getItem(k); } catch { return null; } },
+  set(k,v){ try { localStorage.setItem(k,v); } catch {} },
+  del(k){ try { localStorage.removeItem(k); } catch {} }
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ===================== THEME ===================== */
+const root = document.documentElement;
+function applyTheme(t){
+  if (t === 'system') root.removeAttribute('data-theme'); else root.dataset.theme = t;
+  $$('[data-theme-set]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.themeSet === t)));
+  store.set('hugin.theme', t);
+}
+applyTheme(store.get('hugin.theme') || 'system');
+$$('[data-theme-set]').forEach(b => b.addEventListener('click', () => applyTheme(b.dataset.themeSet)));
+
+/* ===================== REAL OPTION DATA ===================== */
+const PRESETS = ['casual','easy','normal','hard','hardcore','immersive','hammer'];
+const PRESET_BASELINE = {
+  casual:   { Combat:'veryeasy', DeathPenalty:'casual',   Resources:'muchmore', Raids:'none', Portals:'casual' },
+  easy:     { Combat:'easy',     DeathPenalty:'easy',     Resources:'more',     Raids:'less' },
+  normal:   {},
+  hard:     { Combat:'hard',     DeathPenalty:'hard',     Resources:'less',     Raids:'more', Portals:'hard' },
+  hardcore: { Combat:'veryhard', DeathPenalty:'hardcore', Resources:'less',     Raids:'more', Portals:'veryhard' },
+  immersive:{ Combat:'hard',     DeathPenalty:'hard',     Resources:'less',     Raids:'more', Portals:'veryhard' },
+  hammer:   {                    DeathPenalty:'casual',   Resources:'muchmore', Raids:'none', Portals:'casual' },
+};
+const MOD_ORDER = ['Combat','DeathPenalty','Resources','Raids','Portals'];
+const MODIFIERS = {
+  Combat:       ['veryeasy','easy','normal','hard','veryhard'],
+  DeathPenalty: ['casual','veryeasy','easy','normal','hard','hardcore'],
+  Resources:    ['muchless','less','normal','more','muchmore','most'],
+  Raids:        ['none','muchless','less','normal','more','muchmore'],
+  Portals:      ['casual','normal','hard','veryhard'],
+};
+const MOD_LABEL = { Combat:'Combat', DeathPenalty:'Death penalty', Resources:'Resources', Raids:'Raids', Portals:'Portals' };
+const MOD_ENDS = { Combat:['easier','harder'], DeathPenalty:['gentler','harsher'], Resources:['scarcer','plentiful'], Raids:['fewer','more'], Portals:['everything travels','no portals'] };
+const PORTAL_NOTE = { casual:'ores go through portals', normal:'vanilla — ores stay put', hard:'no boss portals', veryhard:'no portals at all' };
+const TOGGLE_GROUPS = [
+  { name:'Map',       keys:['nomap'] },
+  { name:'Building',  keys:['nobuildcost','nocraftcost','noworkbench','allpiecesunlocked','allrecipesunlocked','dungeonbuild'] },
+  { name:'Portals',   keys:['noportals','nobossportals','teleportall'] },
+  { name:'Creatures', keys:['passivemobs','playerevents'] },
+  { name:'Death',     keys:['deathkeepequip','deathdeleteunequipped','deathdeleteItems','deathskillsreset'] },
+  { name:'World',     keys:['fire','worldlevellockedtools'] },
+];
+const TOGGLE_DESC = {
+  nomap:'No map or minimap', nobuildcost:'Building costs no materials', nocraftcost:'Crafting costs no materials',
+  noworkbench:'Build without a workbench nearby', allpiecesunlocked:'Every build piece unlocked from the start',
+  allrecipesunlocked:'Every recipe unlocked from the start', dungeonbuild:'Allow building inside dungeons',
+  noportals:'Portals are disabled', nobossportals:'No boss portals', teleportall:'Everything can travel through portals',
+  passivemobs:'Creatures do not attack unprovoked', playerevents:'Events follow players',
+  deathkeepequip:'Keep equipped gear on death', deathdeleteunequipped:'Unequipped items are destroyed on death',
+  deathdeleteItems:'Every carried item is destroyed on death', deathskillsreset:'All skills reset on death',
+  fire:'Fire flag', worldlevellockedtools:'World-level locked tools',
+};
+const IRREVERSIBLE = ['allpiecesunlocked','allrecipesunlocked','deathdeleteItems','deathdeleteunequipped','deathskillsreset'];
+const NUMERIC = ['EnemyDamage','PlayerDamage','EventRate','EnemyLevelUpRate','EnemySpeedSize','SkillGainRate','SkillReductionRate','StaminaRate','StaminaRegenRate','MoveStaminaRate','AdrenalineRate','WorldLevel'];
+const NUM_LABEL = {
+  EnemyDamage:['Enemy damage',''], PlayerDamage:['Player damage','also scales creature health inversely'],
+  EventRate:['Event rate','0 = no events'], EnemyLevelUpRate:['Enemy level-up rate',''], EnemySpeedSize:['Enemy speed and size',''],
+  SkillGainRate:['Skill gain',''], SkillReductionRate:['Skill loss on death','0 = none'], StaminaRate:['Stamina cost','0 = unlimited'],
+  StaminaRegenRate:['Stamina regen',''], MoveStaminaRate:['Movement stamina cost','0 = unlimited'], AdrenalineRate:['Adrenaline rate',''], WorldLevel:['World level',''],
+};
+const NUM_DEFAULT = 100, NUM_RANGE = [0, 1000];
+
+/* ===================== MOCK SERVER ===================== */
+const now = () => Date.now();
+const S = {
+  running:true, pid:48213, startedAt: now() - 12*60*1000, version:'l-0.221.12', joinCode:'366974',
+  lastSave: now() - 4*60*1000, players:[],
+  config:{ SERVER_NAME:'Lowood-AU', WORLD_NAME:'CrowsNest', PASSWORD:'valhalla-gate', PORT:2456, PUBLIC:true, CROSSPLAY:true, MAX_PLAYERS:10, SAVE_INTERVAL:1800, BACKUPS_KEEP:6 },
+  extras:{ rss_mb:1324, world_objects:419858, world_size_mb:19.3, save_seconds:4.6, backups:6 },
+  mod:{ preset:'normal', enable_modifiers:true, modifiers:{ Combat:'easy', DeathPenalty:'easy', Resources:'more', Raids:'less', Portals:'casual' }, setkeys:{ toggles:[], numeric:{} } },
+  restartRequired:false, mods:[], logs:[], transition:null,
+};
+const stamp = (t=now()) => { const d=new Date(t); const p=n=>String(n).padStart(2,'0'); return `${p(d.getMonth()+1)}/${p(d.getDate())}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; };
+function log(msg, cls=''){ S.logs.push({ t:now(), msg, cls }); if (S.logs.length > 400) S.logs.shift(); logListeners.forEach(f => f(S.logs[S.logs.length-1])); }
+const logListeners = new Set();
+const ip = '203.0.113.42';
+(() => { const t0 = S.startedAt; const seed = [
+  [0,'Valheim version: l-0.221.12 (network version 34)'],[2,'Starting world: CrowsNest'],[9,'Load world: CrowsNest (419858 objects)'],
+  [17,`Session "Lowood-AU" with join code 366974 and IP ${ip}:2456 is active with 0 player(s)`],
+  [8*60,'World save writing starting'],[8*60+4.6,'World saved ( 4612.2ms )']];
+  seed.forEach(([s,m]) => S.logs.push({ t:t0 + s*1000, msg:m, cls:'' })); })();
+const newCode = () => String(100000 + Math.floor(Math.random()*900000));
+const newPid = () => 40000 + Math.floor(Math.random()*20000);
+function statusDoc(){
+  const up = S.running ? Math.floor((now()-S.startedAt)/1000) : 0;
+  return { server_name:S.config.SERVER_NAME, world_name:S.config.WORLD_NAME, running:S.running, pid:S.running?S.pid:null,
+    uptime_seconds:up, uptime_human:human(up), version:S.version,
+    players:{ count:S.players.length, max:S.config.MAX_PLAYERS, names:S.players.slice() },
+    connection:{ ip, port:S.config.PORT, join_code:S.running?S.joinCode:null, crossplay:S.config.CROSSPLAY, public:S.config.PUBLIC },
+    last_save: S.lastSave, extras:{ ...S.extras, rss_mb: S.running ? S.extras.rss_mb : 0 } };
+}
+function human(s){ if (!s) return '—'; const h=Math.floor(s/3600), m=Math.floor((s%3600)/60); return h ? `${h} h ${String(m).padStart(2,'0')} min` : `${m} min`; }
+function doStop(){ S.running=false; S.pid=null; S.players=[]; log('Shutting down server'); log('World save writing starting'); S.lastSave=now(); log(`World saved ( ${(S.extras.save_seconds*1000).toFixed(1)}ms )`); log('Server stopped'); }
+function doStart(){ S.running=true; S.pid=newPid(); S.joinCode=newCode(); S.startedAt=now(); S.restartRequired=false; log(`Valheim version: ${S.version}`); log(`Starting world: ${S.config.WORLD_NAME}`); setTimeout(() => log(`Session "${S.config.SERVER_NAME}" with join code ${S.joinCode} and IP ${ip}:${S.config.PORT} is active with 0 player(s)`), 1500); }
+
+// ── Real API client ───────────────────────────────────────────────────────────
+// Same shape as the mock: every call resolves to {status, body} and never
+// throws, so callers handle transport failure the same way they handle a 500.
+// Routes go to /v1 (see issue #80); /health stays unversioned.
+const API_BASE = '/v1';
+
+const realApi = {
+  async _req(method, path, key, body){
+    const opts = { method, headers: {} };
+    if (key) opts.headers['X-API-Key'] = key;
+    if (body !== undefined){
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    let res;
+    try {
+      res = await fetch(API_BASE + path, opts);
+    } catch (e) {
+      // Network/CORS/offline. status 0 means "never reached the server",
+      // which the UI must not report as an API error.
+      return { status: 0, body: { detail: 'Cannot reach the server: ' + e.message } };
+    }
+    let parsed = {};
+    try { parsed = await res.json(); } catch { parsed = {}; }
+    return { status: res.status, body: parsed };
+  },
+  // /health is unversioned and unauthenticated — an infrastructure probe.
+  async health(){
+    try {
+      const r = await fetch('/health');
+      if (r.ok) return await r.json();
+    } catch { /* fall through */ }
+    return { status: 'unreachable', server_type: 'valheim', server_label: 'Server' };
+  },
+  get(p, k){ return this._req('GET', p, k); },
+  post(p, k, b){ return this._req('POST', p, k, b); },
+  patch(p, k, b){ return this._req('PATCH', p, k, b); },
+  del(p, k){ return this._req('DELETE', p, k); },
+};
+
+
+const mockApi = {
+  async health(){ await sleep(90); return { status:'ok', server_type:'valheim', server_label:S.config.SERVER_NAME }; },
+  async get(path, key){
+    await sleep(120 + Math.random()*140);
+    if (!key || key.length < 12) return { status:401, body:{ detail:'Invalid or missing X-API-Key' } };
+    if (path === '/status') return { status:200, body:statusDoc() };
+    if (path === '/config') return { status:200, body:{ config:{ ...S.config }, editable_keys:Object.keys(S.config) } };
+    if (path === '/modifiers') return { status:200, body:{ ...structuredClone(S.mod), restart_required:true, options:{ presets:PRESETS, preset_baseline:PRESET_BASELINE, modifiers:MODIFIERS, toggles:TOGGLE_GROUPS.flatMap(g=>g.keys), numeric:NUMERIC, numeric_default:NUM_DEFAULT, numeric_range:NUM_RANGE, irreversible_toggles:IRREVERSIBLE } } };
+    if (path === '/mods') return { status:200, body:{ mods:S.mods.map(m=>({...m})) } };
+    if (path === '/logs') return { status:200, body:{ lines:S.logs.slice() } };
+    return { status:404, body:{} };
+  },
+  async post(path, key, body){
+    await sleep(160 + Math.random()*120);
+    if (!key || key.length < 12) return { status:401, body:{ detail:'Invalid or missing X-API-Key' } };
+    const m = path.match(/^\/server\/(\w+)$/);
+    if (m){
+      const a = m[1];
+      if (!['start','stop','restart','backup','update'].includes(a)) return { status:422, body:{ detail:`Unknown action '${a}'` } };
+      if (S.transition) return { status:409, body:{ detail:`Server is busy with '${S.transition}'` } };
+      if (a==='start' && S.running) return { status:409, body:{ detail:'Server is already running' } };
+      if ((a==='stop'||a==='restart') && !S.running) return { status:409, body:{ detail:'Server is not running' } };
+      if (a==='backup' && !S.running) return { status:409, body:{ detail:'Server is not running' } };
+      S.transition = a;
+      if (a==='start'){ setTimeout(()=>{ doStart(); S.transition=null; }, 7000); }
+      if (a==='stop'){ setTimeout(()=>{ doStop(); S.transition=null; }, 4000); }
+      if (a==='restart'){ setTimeout(doStop, 3000); setTimeout(()=>{ doStart(); S.transition=null; }, 10500); }
+      if (a==='backup'){ log('World save writing starting'); setTimeout(()=>{ S.lastSave=now(); S.extras.backups++; log(`World saved ( ${(S.extras.save_seconds*1000+Math.random()*80).toFixed(1)}ms )`); log('Backup written: CrowsNest_'+stamp().replace(/[^0-9]/g,'').slice(0,12)+'.db'); S.transition=null; }, 4600); }
+      if (a==='update'){ setTimeout(doStop, 3000); setTimeout(()=>log('Updating Valheim dedicated server via SteamCMD'), 4500); setTimeout(()=>{ S.version='l-1.0.0'; log('Update complete: l-1.0.0. Server left stopped.','warn'); S.transition=null; }, 14000); }
+      return { status:202, body:{ accepted:true, action:a } };
+    }
+    if (path === '/mods/install'){
+      const id = String(body.id||'').trim(); if (!id) return { status:422, body:{ detail:'A Thunderstore id or URL is required' } };
+      const name = id.split('/').filter(Boolean).pop().replace(/[-_]/g,' ');
+      const mod = { id:id.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''), name, enabled:false, version:'—' };
+      S.mods.push(mod); S.restartRequired = true; log(`Installed mod ${mod.id}`); return { status:202, body:{ mod } };
+    }
+    const em = path.match(/^\/mods\/([^/]+)\/(enable|disable)$/);
+    if (em){ const mod = S.mods.find(x=>x.id===em[1]); if(!mod) return { status:404, body:{} }; mod.enabled = em[2]==='enable'; S.restartRequired=true; return { status:200, body:{ mod } }; }
+    return { status:404, body:{} };
+  },
+  async del(path, key){ await sleep(150); if (!key||key.length<12) return {status:401,body:{}}; const m = path.match(/^\/mods\/([^/]+)$/); if (m){ S.mods = S.mods.filter(x=>x.id!==m[1]); S.restartRequired=true; return { status:200, body:{} }; } return { status:404, body:{} }; },
+  async patch(path, key, body){
+    await sleep(220 + Math.random()*160);
+    if (!key || key.length < 12) return { status:401, body:{ detail:'Invalid or missing X-API-Key' } };
+    if (path === '/config'){
+      const applied = {}; let rr = false;
+      for (const [k,v] of Object.entries(body.changes||{})){
+        if (!(k in S.config)) return { status:422, body:{ detail:`'${k}' is not editable` } };
+        S.config[k] = v; applied[k] = v; if (!['SAVE_INTERVAL','BACKUPS_KEEP'].includes(k)) rr = true;
+      }
+      if (rr) S.restartRequired = true; log(`Config changed: ${Object.keys(applied).join(', ')}`);
+      return { status:200, body:{ applied, restart_required:rr } };
+    }
+    if (path === '/modifiers'){
+      const c = body.changes || {}; const warnings = [];
+      if ('preset' in c && c.preset !== '' && !PRESETS.includes(c.preset)) return { status:422, body:{ detail:`Unknown preset '${c.preset}'` } };
+      for (const [k,v] of Object.entries(c.modifiers||{})){ if (!MODIFIERS[k] || (v !== null && !MODIFIERS[k].includes(v))) return { status:422, body:{ detail:`Bad modifier ${k}=${v}` } }; }
+      for (const [k,v] of Object.entries(c.setkeys?.numeric||{})){ if (!NUMERIC.includes(k) || v<0 || v>1000 || !Number.isInteger(v)) return { status:422, body:{ detail:`Bad value ${k}=${v}` } }; }
+      if ('preset' in c) S.mod.preset = c.preset;
+      for (const [k,v] of Object.entries(c.modifiers||{})){ if (v === null) delete S.mod.modifiers[k]; else S.mod.modifiers[k] = v; }
+      if (c.setkeys?.toggles){ const prev = new Set(S.mod.setkeys.toggles); S.mod.setkeys.toggles = c.setkeys.toggles.slice(); for (const t of c.setkeys.toggles) if (IRREVERSIBLE.includes(t) && !prev.has(t)) warnings.push(`${t} is written into the world save and cannot be reverted.`); }
+      if (c.setkeys?.numeric){ for (const [k,v] of Object.entries(c.setkeys.numeric)){ if (v === NUM_DEFAULT) delete S.mod.setkeys.numeric[k]; else S.mod.setkeys.numeric[k] = v; } }
+      S.restartRequired = true; log('Modifiers changed; restart required');
+      return { status:200, body:{ applied:c, restart_required:true, warnings } };
+    }
+    return { status:404, body:{} };
+  }
+};
+
+/* ===================== AUTH ===================== */
+let KEY = null;
+const lock = $('#lock'), lockErr = $('#lock-err'), keyIn = $('#key');
+// Which one are we? Decided by evidence, not by a build flag: ask the
+// unauthenticated /health endpoint. Served by FastAPI -> real. Opened as a
+// standalone file (or a published artifact) -> mock, and the UI says so.
+let api = mockApi;
+let LIVE = false;
+
+async function detectMode(){
+  try {
+    const res = await fetch('/health', { method: 'GET' });
+    if (res.ok){
+      const b = await res.json();
+      if (b && b.status === 'ok'){ api = realApi; LIVE = true; }
+    }
+  } catch { /* stays mock */ }
+  const note = document.querySelector('.demo');
+  if (note){
+    note.innerHTML = LIVE
+      ? '<b>Live.</b> Connected to this server\u2019s API. Enter the key from <span class="mono">API_KEYS</span> in the server\u2019s <span class="mono">.env</span>.'
+      : '<b>Demo build \u2014 the key is already filled in.</b> Press Unlock. The API is mocked in this page; the field is pre-set to <span class="mono">demo-key-1234</span>.';
+  }
+  const keyInput = document.getElementById('key');
+  if (LIVE && keyInput){ keyInput.value = ''; keyInput.placeholder = 'Paste the key from the server\u2019s .env'; }
+  return LIVE;
+}
+
+async function boot(){
+  await detectMode();
+  const h = await api.health();
+  $('#lock-name').textContent = h.server_label;
+  const reachable = h.status !== 'unreachable';
+  $('#lock-reach').innerHTML = reachable
+    ? `<span class="dot on"></span><span>${esc(h.server_label)} is reachable — <span class="mono">/health</span> answers without a key.</span>`
+    : `<span class="dot off"></span><span>Cannot reach the server. <span class="mono">/health</span> did not answer — the API may be stopped.</span>`;
+  const saved = store.get('hugin.apiKey');
+  if (saved){ keyIn.value = saved; unlock(saved, true); }
+}
+$('#key-reveal').addEventListener('click', e => { const on = keyIn.type === 'password'; keyIn.type = on ? 'text' : 'password'; e.currentTarget.textContent = on ? 'Hide' : 'Show'; e.currentTarget.setAttribute('aria-pressed', String(on)); });
+$('#lock-form').addEventListener('submit', e => { e.preventDefault(); unlock(keyIn.value.trim(), $('#remember').checked); });
+async function unlock(key, remember){
+  lockErr.removeAttribute('data-show');
+  const btn = $('#unlock-btn'); btn.disabled = true; btn.textContent = 'Checking…';
+  const r = await api.get('/status', key);
+  btn.disabled = false; btn.textContent = 'Unlock';
+  if (r.status === 401){
+    KEY = null; store.del('hugin.apiKey');
+    lockErr.innerHTML = `<b>Key rejected.</b> The server answered 401 — it does not recognise this key. Check <span class="mono">API_KEY</span> in the server's environment and try again.`;
+    lockErr.setAttribute('data-show',''); keyIn.focus(); keyIn.select(); return;
+  }
+  KEY = key; if (remember) store.set('hugin.apiKey', key); else store.del('hugin.apiKey');
+  lock.hidden = true; startApp(r.body);
+}
+$('#lock-btn').addEventListener('click', () => { KEY = null; store.del('hugin.apiKey'); stopPolling(); keyIn.value = ''; keyIn.type='password'; $('#key-reveal').textContent='Show'; lock.hidden = false; keyIn.focus(); toast('Locked. The key was removed from this browser.'); });
+
+/* ===================== NAV ===================== */
+function nav(v){
+  $$('.view').forEach(s => s.toggleAttribute('data-active', s.dataset.view === v));
+  $$('.nav [data-nav]').forEach(b => { if (b.dataset.nav === v) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
+  $('#readout').toggleAttribute('data-show', v === 'difficulty');
+  if (v === 'logs') scrollLog();
+  window.scrollTo({ top:0 });
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-nav]'); if (b) nav(b.dataset.nav); });
+
+/* ===================== STATUS / RAIL ===================== */
+let status = null, pollTimer = null, pollGen = 0, pending = null, seenCode = store.get('hugin.seenCode');
+function stopPolling(){ clearTimeout(pollTimer); pollTimer = null; }
+async function poll(){
+  const g = ++pollGen; stopPolling();
+  const r = await api.get('/status', KEY);
+  if (g !== pollGen) return;
+  if (r.status === 401){ $('#lock-btn').click(); return; }
+  status = r.body; renderStatus(); checkPending();
+  pollTimer = setTimeout(poll, pending ? 1500 : 5000);
+}
+function renderStatus(){
+  const s = status; if (!s) return;
+  $('#r-name').textContent = s.server_name; $('#r-world').textContent = s.world_name;
+  const dot = $('#r-dot');
+  dot.className = 'dot ' + (pending ? 'busy' : s.running ? 'on' : 'off');
+  $('#r-state').textContent = pending ? pendingLabel() : s.running ? 'Running' : 'Stopped';
+  $('#r-uptime').textContent = s.running && !pending ? `for ${s.uptime_human}` : '';
+  const codeEl = $('#r-code');
+  if (s.connection.join_code){
+    const c = s.connection.join_code;
+    codeEl.innerHTML = `<span>${esc(c.slice(0,3))}</span><span class="gap"></span><span>${esc(c.slice(3))}</span><button class="link copy" id="copy-code" type="button">Copy</button>`;
+    if (seenCode && seenCode !== c) $('#r-codeflag').hidden = false; else { $('#r-codeflag').hidden = true; if (!seenCode){ seenCode = c; store.set('hugin.seenCode', c); } }
+  } else { codeEl.innerHTML = `<span class="faint" style="font-size:16px;font-weight:400;letter-spacing:0">None while stopped — a new one is issued at start.</span>`; $('#r-codeflag').hidden = true; }
+  $('#r-conn').textContent = `Port ${s.connection.port} · crossplay ${s.connection.crossplay?'on':'off'} · ${s.connection.public?'listed publicly':'unlisted'}`;
+  $('#r-players').innerHTML = `${s.players.count} <span class="weak">of ${s.players.max}</span>`;
+  $('#r-version').textContent = s.version;
+  $('#r-save').textContent = ago(s.last_save);
+  $('#r-pid').textContent = s.pid ? `pid ${s.pid}` : 'not running';
+  $$('#rail-actions [data-action]').forEach(b => {
+    const a = b.dataset.action; let dis = !!pending;
+    if (a === 'start') dis = dis || s.running; if (a !== 'start') dis = dis || !s.running; b.disabled = dis;
+  });
+  $('#upd-btn').disabled = !$('#upd-ack').checked || !!pending;
+  $('#r-restart').toggleAttribute('data-show', S.restartRequired && s.running && !pending);
+  $('#r-restart .btn').disabled = !!pending;
+  renderOverview();
+}
+function ago(t){ if (!t) return '—'; const s = Math.max(0, Math.floor((now()-t)/1000)); if (s < 60) return `${s} s ago`; const m = Math.floor(s/60); if (m < 60) return `${m} min ago`; return `${Math.floor(m/60)} h ${m%60} min ago`; }
+document.addEventListener('click', e => { if (e.target.id === 'copy-code' && status?.connection.join_code){ copy(status.connection.join_code); } });
+$('#ack-code').addEventListener('click', () => { seenCode = status.connection.join_code; store.set('hugin.seenCode', seenCode); $('#r-codeflag').hidden = true; });
+async function copy(t){ try { await navigator.clipboard.writeText(t); toast(`Copied ${t}`); } catch { toast('Could not copy — select the code and copy it by hand.'); } }
+
+/* ---- actions ---- */
+const ACTION_COPY = {
+  start:   { verb:'Start', confirm:null, label:'Starting' },
+  stop:    { verb:'Stop', label:'Stopping', confirm:{ title:'Stop Lowood-AU?', body:`<p>Everyone online is disconnected. The world saves first. The join code is discarded — a new one is issued when you start it again.</p>` } },
+  restart: { verb:'Restart', label:'Restarting', confirm:{ title:'Restart Lowood-AU?', body:`<p>Everyone online is disconnected for about a minute. <b>The join code will change</b> — the group needs the new one to get back in.</p>` } },
+  backup:  { verb:'Back up', label:'Backing up', confirm:null },
+  update:  { verb:'Update', label:'Updating', confirm:null },
+};
+function pendingLabel(){ return ACTION_COPY[pending.action].label + '…'; }
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-action]'); if (!b || b.disabled) return;
+  const a = b.dataset.action; const c = ACTION_COPY[a];
+  if (c.confirm){ const ok = await confirmDialog({ title:c.confirm.title, body:c.confirm.body, confirmLabel:c.verb, danger:a==='stop' }); if (!ok) return; }
+  fire(a);
+});
+async function fire(a){
+  const r = await api.post('/server/'+a, KEY);
+  if (r.status === 202){
+    pending = { action:a, startedAt:now(), pidBefore:status.pid, saveBefore:status.last_save, versionBefore:status.version };
+    log(`Console: ${a} requested`);
+    renderPending(); renderStatus(); poll();
+  } else if (r.status === 409){ toast(`Not now: ${r.body.detail}.`); poll(); }
+  else toast(`The server refused (${r.status}): ${r.body.detail||'unknown error'}.`);
+}
+function renderPending(){
+  const el = $('#r-pending'); if (!pending){ el.removeAttribute('data-show'); return; }
+  const secs = Math.floor((now()-pending.startedAt)/1000);
+  const what = { start:'Waiting for a running process and a join code.', stop:'Waiting for the process to exit.', restart:`Waiting for a new process — anything other than pid ${pending.pidBefore}.`, backup:'Waiting for last_save to move.', update:'Waiting for the server to stop and the version to change.' }[pending.action];
+  el.innerHTML = `<b>${esc(ACTION_COPY[pending.action].label)}</b><span>${esc(what)}</span><span class="elapsed num">Accepted (202) ${secs} s ago · checking /status every 1.5 s</span>`;
+  el.setAttribute('data-show','');
+}
+setInterval(() => { if (pending) renderPending(); if (status) $('#r-save').textContent = ago(status.last_save); }, 1000);
+function checkPending(){
+  if (!pending || !status) return;
+  const s = status, p = pending; let done = null;
+  if (p.action === 'start' && s.running && s.pid) done = `Started. pid ${s.pid}, join code ${s.connection.join_code}.`;
+  if (p.action === 'stop' && !s.running) done = 'Stopped. World saved before exit.';
+  if (p.action === 'restart' && s.running && s.pid && s.pid !== p.pidBefore) done = `Restarted — new pid ${s.pid}. Join code is now ${s.connection.join_code}.`;
+  if (p.action === 'backup' && s.last_save !== p.saveBefore) done = `Backed up. Save took ${S.extras.save_seconds} s.`;
+  if (p.action === 'update' && !s.running && s.version !== p.versionBefore) done = `Updated to ${s.version}. The server is stopped — start it when you're ready.`;
+  if (done){ pending = null; renderPending(); renderStatus(); toast(done, 7000); return; }
+  if (now() - p.startedAt > 120000){
+    pending = null; renderPending(); renderStatus();
+    toast(`Nothing confirmed the ${p.action} within 2 minutes. /status still shows ${s.running?'running':'stopped'}${s.pid?` on pid ${s.pid}`:''}. Check the logs before trying again.`, 12000);
+  }
+}
+/* update: hold-to-confirm */
+$('#upd-ack').addEventListener('change', () => renderStatus());
+attachHold($('#upd-btn'), () => fire('update'));
+function attachHold(btn, onDone){
+  let timer = null;
+  const start = e => { if (btn.disabled || timer) return; if (e.type==='keydown' && !(e.key===' '||e.key==='Enter')) return; if (e.type==='keydown') e.preventDefault(); btn.classList.add('holding'); timer = setTimeout(() => { timer=null; btn.classList.remove('holding'); btn.classList.add('done'); setTimeout(()=>btn.classList.remove('done'), 400); onDone(); }, 2000); };
+  const cancel = () => { if (!timer) return; clearTimeout(timer); timer = null; btn.classList.remove('holding'); };
+  btn.addEventListener('pointerdown', e => { btn.setPointerCapture?.(e.pointerId); start(e); });
+  ['pointerup','pointercancel','pointerleave'].forEach(t => btn.addEventListener(t, cancel));
+  btn.addEventListener('keydown', e => { if (e.repeat) return; start(e); });
+  btn.addEventListener('keyup', cancel); btn.addEventListener('blur', cancel);
+  btn.addEventListener('click', e => e.preventDefault());
+}
+
+/* ===================== OVERVIEW ===================== */
+function renderOverview(){
+  const s = status;
+  $('#o-count').textContent = `${s.players.count} online`;
+  $('#o-players').innerHTML = s.players.count ? s.players.names.map(n=>`<div class="player"><span class="dot on"></span>${esc(n)}</div>`).join('') : `<p class="players-empty">Nobody is on. ${s.running ? 'The server is up and listed — the join code on the left gets them in.' : 'The server is stopped.'}</p>`;
+  $('#o-slots').textContent = `${s.players.count} / ${s.players.max}`; $('#o-slotfill').style.width = (100*s.players.count/s.players.max)+'%';
+  const x = s.extras;
+  $('#o-world').innerHTML = kv([['Objects', x.world_objects.toLocaleString()],['Save file', `${x.world_size_mb} MB`],['Last save', ago(s.last_save)],['A save takes', `${x.save_seconds} s`],['Backups kept', `${x.backups} of ${S.config.BACKUPS_KEEP}`],['Autosave every', `${S.config.SAVE_INTERVAL/60} min`]]);
+  $('#o-proc').innerHTML = kv([['State', s.running?'running':'stopped'],['Process', s.pid?`pid ${s.pid}`:'—'],['Uptime', s.running?s.uptime_human:'—'],['Memory (RSS)', s.running?`${(x.rss_mb/1024).toFixed(1)} GB`:'—'],['Version', s.version],['Listening', `${ip}:${s.connection.port}`]]);
+  const m = S.mod; const eff = effective(m);
+  const parts = [`Preset <b>${m.preset||'none'}</b>`];
+  MOD_ORDER.forEach(k => { const o = m.modifiers[k]; if (o) parts.push(`${MOD_LABEL[k]} <b>${pretty(o)}</b> <span class="faint">(override)</span>`); });
+  const nk = m.setkeys.toggles.length + Object.keys(m.setkeys.numeric).length;
+  parts.push(nk ? `${nk} world key${nk>1?'s':''} set` : 'No world keys set');
+  $('#o-rules').innerHTML = parts.join('<br>');
+}
+const kv = rows => rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+
+/* ===================== DIFFICULTY ===================== */
+let server = null, draft = null;
+const clone = o => structuredClone(o);
+function effective(m){ const base = m.preset ? PRESET_BASELINE[m.preset] : {}; const out = {}; MOD_ORDER.forEach(k => out[k] = m.modifiers[k] || base[k] || 'normal'); return out; }
+const baselineOf = m => { const base = m.preset ? PRESET_BASELINE[m.preset] : {}; const out = {}; MOD_ORDER.forEach(k => out[k] = base[k] || 'normal'); return out; };
+const pretty = v => ({ veryeasy:'very easy', veryhard:'very hard', muchless:'much less', muchmore:'much more' }[v] || v);
+async function loadModifiers(){ const r = await api.get('/modifiers', KEY); server = { preset:r.body.preset, modifiers:r.body.modifiers, setkeys:r.body.setkeys }; draft = clone(server); renderDifficulty(); }
+function renderDifficulty(){ renderPresets(); renderMods(); renderToggles(); renderNums(); renderReadout(); }
+function renderPresets(){
+  const el = $('#presets');
+  el.innerHTML = [...PRESETS, ''].map(p => `<button type="button" data-preset="${p}" aria-pressed="${draft.preset===p}" class="${p?'':'none'}">${p || 'no preset'}</button>`).join('');
+  $$('button', el).forEach(b => b.addEventListener('click', () => { draft.preset = b.dataset.preset; normaliseOverrides(); renderDifficulty(); }));
+  const base = draft.preset ? PRESET_BASELINE[draft.preset] : {}; const set = Object.keys(base);
+  $('#preset-note').innerHTML = draft.preset === '' ? 'No preset: every category starts at normal.' : set.length === 0 ? `<b>${draft.preset}</b> sets nothing — every category starts at normal.` : `<b>${draft.preset}</b> sets ${set.map(k=>`${MOD_LABEL[k].toLowerCase()} ${pretty(base[k])}`).join(', ')}${set.length<5?`; ${MOD_ORDER.filter(k=>!base[k]).map(k=>MOD_LABEL[k].toLowerCase()).join(', ')} stay normal`:''}.`;
+}
+function normaliseOverrides(){ const base = baselineOf(draft); MOD_ORDER.forEach(k => { if (draft.modifiers[k] === base[k]) delete draft.modifiers[k]; }); }
+function renderMods(){
+  const base = baselineOf(draft), eff = effective(draft);
+  $('#mods').innerHTML = MOD_ORDER.map(k => {
+    const opts = MODIFIERS[k], bi = opts.indexOf(base[k]), ei = opts.indexOf(eff[k]); const over = !!draft.modifiers[k];
+    const pos = i => (100*i/(opts.length-1)).toFixed(2)+'%';
+    const delta = over ? `<div class="ordrail-delta" style="left:${pos(Math.min(bi,ei))};width:${(100*Math.abs(bi-ei)/(opts.length-1)).toFixed(2)}%"></div>` : '';
+    const meta = over ? `Preset gives <b>${pretty(base[k])}</b>; overriding to <b>${pretty(eff[k])}</b>` : `<b>${pretty(eff[k])}</b> — ${draft.preset && PRESET_BASELINE[draft.preset][k] ? `from the ${draft.preset} preset` : 'the default, nothing set'}`;
+    const note = k === 'Portals' ? ` · ${PORTAL_NOTE[eff[k]]}` : '';
+    return `<div class="mod ${over?'over':''}" data-cat="${k}">
+      <div class="mod-head"><span class="mod-name">${MOD_LABEL[k]}</span><span class="mod-meta">${meta}${note}</span>${over?`<button type="button" class="link" data-clear="${k}">Use preset value</button>`:''}</div>
+      <div class="ordrail" role="radiogroup" aria-label="${MOD_LABEL[k]}: ${MOD_ENDS[k][0]} to ${MOD_ENDS[k][1]}"><div class="ordrail-line"></div>${delta}
+        ${opts.map((o,i) => `<button type="button" role="radio" class="stop ${i===bi?'base':''}" aria-checked="${i===ei}" tabindex="${i===ei?0:-1}" style="left:${pos(i)}" data-cat="${k}" data-val="${o}" aria-label="${pretty(o)}${i===bi?' (preset baseline)':''}"><span class="pip"></span><span>${pretty(o)}</span></button>`).join('')}
+      </div></div>`;
+  }).join('');
+  $$('#mods .stop').forEach(b => {
+    b.addEventListener('click', () => setMod(b.dataset.cat, b.dataset.val));
+    b.addEventListener('keydown', e => { const opts = MODIFIERS[b.dataset.cat]; let i = opts.indexOf(b.dataset.val); if (e.key==='ArrowRight'||e.key==='ArrowDown') i++; else if (e.key==='ArrowLeft'||e.key==='ArrowUp') i--; else if (e.key==='Home') i=0; else if (e.key==='End') i=opts.length-1; else return; e.preventDefault(); i = Math.max(0, Math.min(opts.length-1, i)); setMod(b.dataset.cat, opts[i]); $(`#mods .stop[data-cat="${b.dataset.cat}"][data-val="${opts[i]}"]`)?.focus(); });
+  });
+  $$('#mods [data-clear]').forEach(b => b.addEventListener('click', () => { delete draft.modifiers[b.dataset.clear]; renderMods(); renderReadout(); }));
+}
+function setMod(k, v){ const base = baselineOf(draft); if (v === base[k]) delete draft.modifiers[k]; else draft.modifiers[k] = v; renderMods(); renderReadout(); }
+function renderToggles(){
+  const on = new Set(draft.setkeys.toggles), serverOn = new Set(server.setkeys.toggles);
+  $('#toggles').innerHTML = TOGGLE_GROUPS.map(g => `<div class="tgroup"><h3>${g.name}</h3><div class="tlist">${g.keys.map(k => {
+    const perm = IRREVERSIBLE.includes(k), locked = perm && serverOn.has(k);
+    return `<div class="trow ${perm?'perm':''} ${locked?'locked':''}"><div><span class="k">${k}</span>${perm?`<span class="perm-tag">permanent</span>`:''}<div class="d">${esc(TOGGLE_DESC[k])}${locked?'. Already written into the world — switching it off does nothing.':perm?'. Once applied, this stays in the world save even if you turn it off later.':'.'}</div></div>
+      <button type="button" class="switch" role="switch" aria-checked="${on.has(k)}" aria-label="${k}" data-toggle="${k}" ${locked?'disabled':''}></button></div>`; }).join('')}</div></div>`).join('');
+  $$('#toggles [data-toggle]').forEach(b => b.addEventListener('click', () => { const k = b.dataset.toggle; const i = draft.setkeys.toggles.indexOf(k); if (i>=0) draft.setkeys.toggles.splice(i,1); else draft.setkeys.toggles.push(k); b.setAttribute('aria-checked', String(i<0)); renderReadout(); }));
+}
+/* log-scale mapping: p 0..100 -> value; 50 = 100 (vanilla); 35 = 50; 65 = 200; 100 = 1000; 0 = off */
+const p2v = p => p <= 0 ? 0 : Math.round(100 * Math.pow(10, (p-50)/50));
+const v2p = v => v <= 0 ? 0 : Math.max(1, Math.min(100, 50 + 50*Math.log10(v/100)));
+const numText = v => v === 0 ? 'Off' : v === 100 ? 'Vanilla' : `×${(v/100).toLocaleString(undefined,{maximumFractionDigits:2})}`;
+function renderNums(){
+  const vals = draft.setkeys.numeric;
+  $('#nums').innerHTML = NUMERIC.map(k => {
+    const v = vals[k] ?? NUM_DEFAULT; const p = v2p(v), dev = v !== NUM_DEFAULT;
+    const [lo, hi] = p < 50 ? [p, 50] : [50, p];
+    return `<div class="numrow ${dev?'dev':''}" data-num="${k}">
+      <div class="head"><span><span class="k">${NUM_LABEL[k][0]}</span>${NUM_LABEL[k][1]?`<span class="d">${NUM_LABEL[k][1]}</span>`:''}</span><span class="v"><b>${numText(v)}</b>${dev?` · ${v}`:''}</span></div>
+      <input class="input num" type="number" min="0" max="1000" step="1" value="${v}" aria-label="${NUM_LABEL[k][0]} (0 to 1000, 100 is vanilla)">
+      <div class="ntrack"><div class="line"></div><div class="center"></div><div class="fill" style="left:${lo}%;width:${(hi-lo).toFixed(2)}%;${dev?'':'display:none'}"></div>
+        ${[[0,'off'],[35,'×½'],[50,'×1'],[65,'×2'],[85,'×5'],[100,'×10']].map(([tp,tl])=>`<span class="tick" style="left:${tp}%">${tl}</span>`).join('')}
+        <input type="range" min="0" max="100" step="1" value="${p.toFixed(0)}" aria-label="${NUM_LABEL[k][0]} slider" aria-valuetext="${numText(v)}"><div class="thumb" style="left:${p}%"></div>
+      </div></div>`;
+  }).join('');
+  $$('#nums .numrow').forEach(row => {
+    const k = row.dataset.num, range = $('input[type=range]', row), numIn = $('input[type=number]', row);
+    range.addEventListener('input', () => setNum(k, p2v(+range.value), row));
+    numIn.addEventListener('change', () => { let v = Math.round(+numIn.value); if (!Number.isFinite(v)) v = NUM_DEFAULT; v = Math.max(0, Math.min(1000, v)); numIn.value = v; setNum(k, v, row); });
+  });
+}
+function setNum(k, v, row){
+  if (v === NUM_DEFAULT) delete draft.setkeys.numeric[k]; else draft.setkeys.numeric[k] = v;
+  const p = v2p(v), dev = v !== NUM_DEFAULT, [lo,hi] = p < 50 ? [p,50] : [50,p];
+  row.classList.toggle('dev', dev);
+  $('.v', row).innerHTML = `<b>${numText(v)}</b>${dev?` · ${v}`:''}`;
+  const fill = $('.fill', row); fill.style.left = lo+'%'; fill.style.width = (hi-lo)+'%'; fill.style.display = dev ? '' : 'none';
+  $('.thumb', row).style.left = p+'%';
+  const r = $('input[type=range]', row); if (document.activeElement !== r) r.value = p.toFixed(0); r.setAttribute('aria-valuetext', numText(v));
+  const n = $('input[type=number]', row); if (document.activeElement !== n) n.value = v;
+  renderReadout();
+}
+function argsOf(m){
+  const parts = [];
+  if (m.preset) parts.push(['preset', `-preset ${m.preset}`]);
+  MOD_ORDER.forEach(k => { if (m.modifiers[k]) parts.push([`mod:${k}`, `-modifier ${k.toLowerCase()} ${m.modifiers[k]}`]); });
+  m.setkeys.toggles.forEach(t => parts.push([`t:${t}`, `-setkey ${t}`]));
+  NUMERIC.forEach(k => { const v = m.setkeys.numeric[k]; if (v !== undefined && v !== NUM_DEFAULT) parts.push([`n:${k}`, `-setkey ${k} ${v}`]); });
+  return parts;
+}
+function diffOf(){
+  const d = [], sv = server, dr = draft;
+  if (sv.preset !== dr.preset) d.push({ k:'preset', from:sv.preset||'none', to:dr.preset||'none' });
+  MOD_ORDER.forEach(k => { if ((sv.modifiers[k]||null) !== (dr.modifiers[k]||null)) d.push({ k:`modifier ${k}`, from:sv.modifiers[k]||'(preset)', to:dr.modifiers[k]||'(preset)' }); });
+  const a = new Set(sv.setkeys.toggles), b = new Set(dr.setkeys.toggles);
+  b.forEach(t => { if (!a.has(t)) d.push({ k:t, from:'off', to:'on', perm:IRREVERSIBLE.includes(t) }); });
+  a.forEach(t => { if (!b.has(t)) d.push({ k:t, from:'on', to:'off' }); });
+  NUMERIC.forEach(k => { const f = sv.setkeys.numeric[k] ?? 100, t = dr.setkeys.numeric[k] ?? 100; if (f !== t) d.push({ k, from:String(f), to:String(t) }); });
+  return d;
+}
+function renderReadout(){
+  const cur = new Map(argsOf(server).map(([id,a]) => [id,a])); const parts = argsOf(draft);
+  const html = parts.length ? parts.map(([id,a]) => `<b class="${cur.get(id)===a?'':'chg'}">${esc(a)}</b>`).join(' ') : '<span class="none">no arguments — plain vanilla</span>';
+  $('#cmd').innerHTML = html;
+  const d = diffOf(); const n = d.length;
+  $('#dirty').textContent = n ? `${n} change${n>1?'s':''} not applied` : 'Matches the server';
+  $('#apply').disabled = !n; $('#discard').disabled = !n;
+}
+$('#discard').addEventListener('click', () => { draft = clone(server); renderDifficulty(); });
+$('#apply').addEventListener('click', async () => {
+  const d = diffOf(); if (!d.length) return; const perms = d.filter(x => x.perm);
+  const body = `<p>These are written to the server now and take effect at the next restart.</p><ul class="diff">${d.map(x => `<li><span>${esc(x.k)}</span><span>${esc(x.from)} <span class="arrow">→</span> <b>${esc(x.to)}</b></span></li>`).join('')}</ul>` +
+    (perms.length ? `<div class="perm-block"><b>Permanent for ${esc(S.config.WORLD_NAME)}.</b> Once the server starts with ${perms.map(p=>`<code>${esc(p.k)}</code>`).join(', ')}, ${perms.length>1?'they are':'it is'} written into the world save. Switching ${perms.length>1?'them':'it'} off later changes nothing. The only way back is an older backup.</div>` : '');
+  const ok = await confirmDialog({ title:'Apply difficulty changes', body, confirmLabel: perms.length ? 'Hold to apply' : 'Apply', hold: perms.length > 0, danger: perms.length > 0 });
+  if (!ok) return;
+  const changes = {}; if (server.preset !== draft.preset) changes.preset = draft.preset;
+  const mods = {}; MOD_ORDER.forEach(k => { if ((server.modifiers[k]||null) !== (draft.modifiers[k]||null)) mods[k] = draft.modifiers[k] || null; }); if (Object.keys(mods).length) changes.modifiers = mods;
+  changes.setkeys = { toggles:draft.setkeys.toggles.slice(), numeric:{} }; NUMERIC.forEach(k => { const f = server.setkeys.numeric[k] ?? 100, t = draft.setkeys.numeric[k] ?? 100; if (f !== t) changes.setkeys.numeric[k] = t; });
+  const r = await api.patch('/modifiers', KEY, { changes });
+  if (r.status !== 200){ toast(`Not applied (${r.status}): ${r.body.detail||'server rejected the change'}.`, 8000); return; }
+  await loadModifiers(); renderStatus();
+  toast(r.body.restart_required ? `Applied. Restart ${S.config.SERVER_NAME} to put the new rules in force.` : 'Applied.', 7000);
+  r.body.warnings.forEach(w => toast(w, 9000));
+});
+
+/* ===================== SETTINGS ===================== */
+const CFG = [
+  ['SERVER_NAME','Server name','text',true,'Shown in the server browser'],['WORLD_NAME','World name','text',true,'Changing this loads a different world file, it does not rename this one'],
+  ['PASSWORD','Password','password',true,'At least 5 characters, not contained in the server name'],['PORT','Port','number',true,'Valheim uses this and the next one up'],
+  ['PUBLIC','Listed publicly','bool',true,''],['CROSSPLAY','Crossplay','bool',true,'Lets console and Game Pass players join; also what issues the join code'],
+  ['MAX_PLAYERS','Max players','number',true,''],['SAVE_INTERVAL','Autosave interval (seconds)','number',false,''],['BACKUPS_KEEP','Backups to keep','number',false,''],
+];
+let cfg = null;
+async function loadConfig(){ const r = await api.get('/config', KEY); cfg = r.body.config; renderConfig(); }
+function renderConfig(){
+  const f = $('#cfg-form');
+  f.innerHTML = CFG.map(([k,label,type,rr,hint]) => {
+    const v = cfg[k]; let ctl;
+    if (type === 'bool') ctl = `<button type="button" class="switch" role="switch" aria-checked="${v}" data-cfg="${k}" aria-label="${label}"></button>`;
+    else if (type === 'password') ctl = `<div class="inrow"><input class="input" type="password" name="${k}" value="${esc(v)}" autocomplete="off"><button type="button" class="btn sm" data-reveal aria-pressed="false">Show</button></div>`;
+    else ctl = `<input class="input ${type==='number'?'num':''}" type="${type}" name="${k}" value="${esc(v)}">`;
+    return `<div class="field"><label for="cfg-${k}">${label}${rr?'<span class="needs">restart</span>':''}</label>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
+  }).join('') + `<div class="form-foot"><button class="btn primary" type="submit">Save settings</button><span class="faint" id="cfg-msg"></span></div>`;
+  $$('[data-cfg]', f).forEach(b => b.addEventListener('click', () => b.setAttribute('aria-checked', String(b.getAttribute('aria-checked') !== 'true'))));
+  $$('[data-reveal]', f).forEach(b => b.addEventListener('click', () => { const i = b.previousElementSibling; const on = i.type === 'password'; i.type = on ? 'text' : 'password'; b.textContent = on ? 'Hide' : 'Show'; b.setAttribute('aria-pressed', String(on)); }));
+}
+$('#cfg-form').addEventListener('submit', async e => {
+  e.preventDefault(); const f = e.currentTarget; const changes = {};
+  CFG.forEach(([k,,type]) => { let v; if (type === 'bool') v = $(`[data-cfg="${k}"]`, f).getAttribute('aria-checked') === 'true'; else { v = f.elements[k].value; if (type === 'number') v = Number(v); } if (v !== cfg[k]) changes[k] = v; });
+  if (!Object.keys(changes).length){ toast('Nothing changed.'); return; }
+  const r = await api.patch('/config', KEY, { changes });
+  if (r.status !== 200){ toast(`Not saved (${r.status}): ${r.body.detail}.`); return; }
+  await loadConfig(); poll();
+  const keys = Object.keys(r.body.applied).join(', ');
+  toast(r.body.restart_required ? `Saved ${keys}. Restart to apply.` : `Saved ${keys}. Applied without a restart.`, 6000);
+});
+
+/* ===================== LOGS ===================== */
+let following = true;
+const logbox = $('#logbox');
+function fmtLine(l){ const cls = l.cls || (/error|exception/i.test(l.msg) ? 'err' : /warn/i.test(l.msg) ? 'warn' : ''); return `<span class="ln ${cls}">${esc(stamp(l.t))}: ${esc(l.msg).replace(/(join code \d{6})/, '<b>$1</b>')}</span>`; }
+async function loadLogs(){ const r = await api.get('/logs', KEY); logbox.innerHTML = r.body.lines.map(fmtLine).join(''); scrollLog(); }
+logListeners.add(l => { logbox.insertAdjacentHTML('beforeend', fmtLine(l)); if (following) scrollLog(); });
+function scrollLog(){ if (following) logbox.scrollTop = logbox.scrollHeight; }
+$('#log-follow').addEventListener('click', e => { following = !following; e.currentTarget.textContent = following ? 'Pause' : 'Follow'; e.currentTarget.setAttribute('aria-pressed', String(following)); $('#log-pill').innerHTML = following ? '<span class="dot on"></span>following' : '<span class="dot"></span>paused'; scrollLog(); });
+$('#log-clear').addEventListener('click', () => { logbox.innerHTML = ''; });
+
+/* ===================== MODS ===================== */
+async function loadMods(){ const r = await api.get('/mods', KEY); renderMods_(r.body.mods); }
+function renderMods_(mods){
+  const v = $('#mods-view');
+  const installer = `<div class="inrow"><input class="input" id="mod-id" placeholder="Thunderstore id or URL, e.g. ValheimModding/Jotunn" aria-label="Mod to install"><button class="btn" id="mod-install" type="button">Install</button></div>`;
+  if (!mods.length){
+    v.innerHTML = `<div class="empty"><h2>No mods installed</h2><p>${esc(S.config.SERVER_NAME)} runs vanilla Valheim ${esc(S.version)}. Players need nothing extra to join.</p>${installer}</div>
+      <div class="callout">Tomorrow's 1.0 update is a major version. If you install anything today, expect to check it again after updating.</div>`;
+  } else {
+    v.innerHTML = `<div class="modlist">${mods.map(m => `<div class="modrow"><span class="dot ${m.enabled?'on':''}"></span><div><div class="n">${esc(m.name)}</div><div class="id">${esc(m.id)}</div></div><div class="acts"><button class="btn sm" data-mod="${esc(m.id)}" data-modact="${m.enabled?'disable':'enable'}">${m.enabled?'Disable':'Enable'}</button><button class="btn sm danger" data-mod="${esc(m.id)}" data-modact="remove">Remove</button></div></div>`).join('')}</div>${installer}
+      <div class="callout">Enabling or removing a mod takes effect at the next restart.</div>`;
+  }
+  $('#mod-install').addEventListener('click', async () => { const id = $('#mod-id').value.trim(); if (!id){ $('#mod-id').focus(); return; } const r = await api.post('/mods/install', KEY, { id }); if (r.status === 202){ toast(`Installing ${id}. Enable it, then restart.`); await loadMods(); renderStatus(); } else toast(`Not installed (${r.status}): ${r.body.detail}.`); });
+  $$('[data-modact]', v).forEach(b => b.addEventListener('click', async () => {
+    const id = b.dataset.mod, a = b.dataset.modact;
+    if (a === 'remove'){ const ok = await confirmDialog({ title:`Remove ${id}?`, body:'<p>The mod files are deleted from the server. Its config stays. Takes effect at the next restart.</p>', confirmLabel:'Remove', danger:true }); if (!ok) return; await api.del(`/mods/${id}`, KEY); toast(`Removed ${id}.`); }
+    else { await api.post(`/mods/${id}/${a}`, KEY); toast(`${a === 'enable' ? 'Enabled' : 'Disabled'} ${id}. Restart to apply.`); }
+    await loadMods(); renderStatus();
+  }));
+}
+
+/* ===================== DIALOG / TOAST ===================== */
+const dlg = $('#dlg'), dlgBody = $('#dlg-body');
+function confirmDialog({ title, body, confirmLabel='Confirm', hold=false, danger=false }){
+  return new Promise(resolve => {
+    dlgBody.innerHTML = `<h2>${esc(title)}</h2><div class="body">${body}</div><div class="foot"><button class="btn" type="button" data-x="cancel">Cancel</button><button class="btn ${danger?'danger':'primary'} ${hold?'hold':''}" type="button" data-x="ok">${hold?'<span class="fillbar"></span>':''}<span class="txt">${esc(confirmLabel)}</span></button>${hold?'<div class="hold-hint">Press and hold for two seconds.</div>':''}</div>`;
+    const finish = v => { dlg.close(); resolve(v); };
+    $('[data-x="cancel"]', dlgBody).addEventListener('click', () => finish(false));
+    const ok = $('[data-x="ok"]', dlgBody);
+    if (hold) attachHold(ok, () => finish(true)); else ok.addEventListener('click', () => finish(true));
+    dlg.addEventListener('cancel', () => resolve(false), { once:true });
+    dlg.showModal(); (hold ? $('[data-x="cancel"]', dlgBody) : ok).focus();
+  });
+}
+function toast(msg, ms=4000){ const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; $('#toasts').appendChild(t); setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 400); }, ms); }
+
+/* ===================== START ===================== */
+async function startApp(firstStatus){
+  status = firstStatus; renderStatus();
+  await Promise.all([loadModifiers(), loadConfig(), loadLogs(), loadMods()]);
+  poll();
+}
+boot();
+})();
+</script>
+</body>
+</html>
