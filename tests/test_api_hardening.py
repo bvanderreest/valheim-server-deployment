@@ -140,3 +140,31 @@ def test_console_declares_no_hardcoded_key():
     html = client.get("/").text
     import re
     assert not re.search(r'X-API-Key["\']\s*:\s*["\'][A-Za-z0-9]{16,}', html)
+
+
+# ─── /status extras (what the console needs and cannot derive) ───────────────
+
+def test_status_extras_carries_console_fields():
+    """The console reads extras.rss_mb, extras.save_seconds and
+    extras.backups. When those were absent the Process and World cards
+    rendered EMPTY against the live server while every test passed."""
+    d = client.get("/v1/status", headers=HEADERS).json()
+    extras = d["extras"]
+    for k in ("rss_mb", "save_seconds", "world_objects", "world_bytes", "backups", "crossplay", "public"):
+        assert k in extras, f"extras missing {k}"
+    assert isinstance(extras["backups"], list)
+
+
+def test_backups_entries_have_age_and_size():
+    """Backup AGE is the thing that matters, so each entry must carry a
+    timestamp the UI can render, not just a filename."""
+    for b in client.get("/v1/status", headers=HEADERS).json()["extras"]["backups"]:
+        assert {"name", "bytes", "modified"} <= set(b)
+
+
+def test_console_ago_handles_iso_strings():
+    """last_save is ISO 8601; the console used to subtract it from a number
+    and render 'NaN h NaN min ago'."""
+    html = client.get("/").text
+    assert "Date.parse(t)" in html
+    assert "Number.isFinite(ms)" in html

@@ -125,6 +125,87 @@ def _get_version() -> Optional[str]:
 _JOIN_CODE_RE = re.compile(r"join code[:\s]+([0-9A-Za-z]{4,16})", re.IGNORECASE)
 
 
+def _rss_mb(pid: int | None) -> float | None:
+    """Resident memory of the server process, in MB."""
+    if not pid:
+        return None
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return round(int(line.split()[1]) / 1024, 1)
+    except (OSError, ValueError, IndexError):
+        pass
+    return None
+
+
+def _save_seconds() -> float | None:
+    """How long the last world save took. Valheim logs 'World saved ( 4637.014ms )'.
+
+    This is the number that tells an operator whether saves are getting
+    expensive as the world grows, so it is worth surfacing.
+    """
+    for line in reversed(_tail_log(400)):
+        m = re.search(r"World saved \(\s*([0-9.]+)ms\s*\)", line)
+        if m:
+            try:
+                return round(float(m.group(1)) / 1000, 2)
+            except ValueError:
+                return None
+    return None
+
+
+def _world_objects() -> int | None:
+    """ZDO count from 'Saved 419858 ZDOs' — the real driver of save cost."""
+    for line in reversed(_tail_log(400)):
+        m = re.search(r"Saved (\d+) ZDOs", line)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _world_bytes() -> int | None:
+    """Size of the live world file, whatever the save layout."""
+    world_dir = settings.savedir / "worlds_local"
+    if not world_dir.is_dir():
+        return None
+    flat = world_dir / f"{settings.world_name}.db"
+    if flat.is_file():
+        return flat.stat().st_size
+    chunked = world_dir / settings.world_name
+    if chunked.is_dir():
+        try:
+            return sum(f.stat().st_size for f in chunked.rglob("*") if f.is_file())
+        except OSError:
+            return None
+    return None
+
+
+def _backups() -> list[dict]:
+    """Manual tarballs, newest first. There is no dedicated backups endpoint,
+    and a console cannot show backup AGE — the thing that actually matters —
+    without this."""
+    d = settings.backup_dir
+    if not d or not Path(d).is_dir():
+        return []
+    out = []
+    try:
+        files = sorted(Path(d).glob("*.tar.gz"), key=lambda f: f.stat().st_mtime, reverse=True)
+    except OSError:
+        return []
+    for f in files[:20]:
+        try:
+            st = f.stat()
+        except OSError:
+            continue
+        out.append({
+            "name": f.name,
+            "bytes": st.st_size,
+            "modified": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc)
+                        .isoformat().replace("+00:00", "Z"),
+        })
+    return out
+
+
 def _get_join_code() -> Optional[str]:
     # The code is issued once at startup, so a 200-line tail loses it as soon
     # as the server logs anything. Scan a much deeper window, and fall back to
@@ -239,6 +320,14 @@ async def get_status() -> StatusResponse:
         extras={
             "crossplay": settings.crossplay.lower() == "true",
             "public": settings.public == "1",
+            # Everything below is what a console needs and cannot derive:
+            # memory pressure, how expensive saves have become, how big the
+            # world is, and — most importantly — how old the newest backup is.
+            "rss_mb": _rss_mb(pid) if running else None,
+            "save_seconds": _save_seconds() if running else None,
+            "world_objects": _world_objects() if running else None,
+            "world_bytes": _world_bytes(),
+            "backups": _backups(),
         },
         deprecated={
             "ip": ip,

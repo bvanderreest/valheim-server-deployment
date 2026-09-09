@@ -477,7 +477,7 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
         </div>
 
         <div class="update">
-          <h2>Valheim 1.0 “Deep North” releases tomorrow, 9 September</h2>
+          <h2>Valheim 1.0 “Deep North” — release day, 9 September</h2>
           <p class="lede">Updating is not a background job. Here is exactly what <span class="mono">update</span> does to Lowood-AU:</p>
           <ul class="consequences">
             <li class="hard">Stops the server. Anyone playing is disconnected without warning.</li>
@@ -877,7 +877,21 @@ function renderStatus(){
   $('#r-restart .btn').disabled = !!pending;
   renderOverview();
 }
-function ago(t){ if (!t) return '—'; const s = Math.max(0, Math.floor((now()-t)/1000)); if (s < 60) return `${s} s ago`; const m = Math.floor(s/60); if (m < 60) return `${m} min ago`; return `${Math.floor(m/60)} h ${m%60} min ago`; }
+// Accepts epoch millis OR an ISO 8601 string. The mock supplied numbers; the
+// real API returns ISO ("2026-09-08T11:56:08Z"), so subtracting it from a
+// number produced "NaN h NaN min ago" against the live server.
+function ago(t){
+  if (t === null || t === undefined || t === '') return '—';
+  const ms = typeof t === 'number' ? t : Date.parse(t);
+  if (!Number.isFinite(ms)) return '—';
+  const s = Math.max(0, Math.floor((now() - ms) / 1000));
+  if (s < 60) return `${s} s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} h ${m % 60} min ago`;
+  return `${Math.floor(h / 24)} d ${h % 24} h ago`;
+}
 document.addEventListener('click', e => { if (e.target.id === 'copy-code' && status?.connection.join_code){ copy(status.connection.join_code); } });
 $('#ack-code').addEventListener('click', () => { seenCode = status.connection.join_code; store.set('hugin.seenCode', seenCode); $('#r-codeflag').hidden = true; });
 async function copy(t){ try { await navigator.clipboard.writeText(t); toast(`Copied ${t}`); } catch { toast('Could not copy — select the code and copy it by hand.'); } }
