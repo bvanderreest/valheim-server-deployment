@@ -223,3 +223,47 @@ def test_console_normalises_plain_string_log_lines():
 def test_console_uses_the_real_ip_not_the_mock_constant():
     html = client.get("/").text
     assert "s.connection.ip" in html, "Listening must come from /status"
+
+
+# ─── /v1 canonical ───────────────────────────────────────────────────────────
+
+def test_capabilities_declares_contract_and_canonical_prefix():
+    """A consumer must discover which contract this speaks and which prefix is
+    current, rather than inferring it from what happens to answer — both /x
+    and /v1/x resolve, so 'it responded' proves nothing about which is right."""
+    d = client.get("/v1/capabilities", headers=HEADERS).json()
+    assert d["contract"] == "corehost"
+    assert d["contract_version"]
+    assert d["canonical_prefix"] == "/v1"
+
+
+def test_bare_paths_are_marked_deprecated_in_the_schema():
+    schema = client.get("/openapi.json").json()["paths"]
+    bare = [p for p in schema if not p.startswith("/v1") and p not in ("/", "/health")]
+    assert bare, "expected legacy aliases to still be published"
+    for p in bare:
+        for method, op in schema[p].items():
+            assert op.get("deprecated") is True, f"{method.upper()} {p} not marked deprecated"
+
+
+def test_versioned_paths_are_not_deprecated():
+    """The deprecation sweep must not catch the canonical surface."""
+    schema = client.get("/openapi.json").json()["paths"]
+    v1 = [p for p in schema if p.startswith("/v1")]
+    assert v1
+    for p in v1:
+        for method, op in schema[p].items():
+            assert not op.get("deprecated"), f"{method.upper()} {p} wrongly deprecated"
+
+
+# ─── key-rejected vs unreachable ─────────────────────────────────────────────
+
+def test_console_separates_key_rejected_from_unreachable():
+    """/health needs no key, so a Portal (or console) polling only that would
+    show green with a revoked key. The console must treat 401 and transport
+    failure as DIFFERENT states, and neither as 'running'."""
+    html = client.get("/").text
+    assert "Key rejected." in html, "401 must produce an explicit key-rejected message"
+    assert "r.status === 0" in html, "transport failure must be handled distinctly"
+    assert "Lost contact with the server." in html
+    assert "last known values, not current" in html, "stale figures must be labelled stale"

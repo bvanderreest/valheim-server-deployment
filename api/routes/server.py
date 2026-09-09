@@ -392,6 +392,12 @@ async def server_action(action: str, background_tasks: BackgroundTasks) -> Actio
 async def get_capabilities() -> dict:
     return {
         "server_type": settings.server_type,
+        # A consumer must be able to discover which contract this speaks and
+        # which path prefix is canonical, rather than guessing from what
+        # happens to answer. Both /x and /v1/x resolve; only one is current.
+        "contract": "corehost",
+        "contract_version": "1.0.0",
+        "canonical_prefix": "/v1",
         "capabilities": {
             "control": list(_VALID_ACTIONS),
             "config": True,
