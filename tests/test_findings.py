@@ -134,14 +134,44 @@ def test_traffic_is_unknown_rather_than_zero_when_nobody_played():
 def test_cadence_catches_a_setting_that_is_not_being_applied():
     """The most common reason a config change 'does nothing': the running
     server is not reading the .env you edited."""
-    f = F._cfg_cadence(_saves([500] * 6, gap=300), interval_s=1800)
+    f = F._cfg_cadence(_saves([500] * 12, gap=300), interval_s=1800)
     assert f["verdict"] == F.PROBLEM
     assert "not what is driving them" in f["headline"]
 
 
 def test_cadence_is_ok_when_saves_match_the_setting():
-    f = F._cfg_cadence(_saves([500] * 6, gap=1800), interval_s=1800)
+    f = F._cfg_cadence(_saves([500] * 12, gap=1800), interval_s=1800)
     assert f["verdict"] == F.OK
+
+
+def test_cadence_is_not_fooled_by_a_window_that_spans_a_config_change():
+    """Found live, not in review. Two hours after SAVE_INTERVAL went 5 min ->
+    30 min, the 24 h window held 260 gaps of which 250 were from the old
+    setting. The median said 5 min and the check called a correct, already-fixed
+    server misconfigured — sending the operator to fix what was not broken."""
+    t = 1_000_000.0
+    old_cadence = [{"kind": "save", "epoch": t + i * 300, "ms": 500.0, "exact": True,
+                    "total_ms": 4200.0, "objects": None, "zdos": 419858} for i in range(250)]
+    t2 = old_cadence[-1]["epoch"] + 1800
+    new_cadence = [{"kind": "save", "epoch": t2 + i * 1800, "ms": 500.0, "exact": True,
+                    "total_ms": 4200.0, "objects": None, "zdos": 419858} for i in range(10)]
+
+    f = F._cfg_cadence(old_cadence + new_cadence, interval_s=1800)
+    assert f["verdict"] == F.OK, "the setting IS being honoured now"
+    assert "changed during this window" in f["headline"]
+    ev = {e["label"]: e["value"] for e in f["evidence"]}
+    assert ev["Recent gap (median)"].startswith("30.0 min")
+    assert ev["Earlier in this window"].startswith("5.0 min"), "the change is evidence, not noise"
+
+
+def test_cadence_orders_saves_before_measuring_gaps():
+    """Gaps off unsorted events produce negatives, which the filter drops —
+    silently shrinking the sample instead of failing."""
+    rows = _saves([500] * 12, gap=1800)
+    rows.reverse()
+    f = F._cfg_cadence(rows, interval_s=1800)
+    assert f["verdict"] == F.OK
+    assert f["evidence"][-1]["value"] == "11"
 
 
 def test_budget_quantifies_the_lever_at_other_intervals():

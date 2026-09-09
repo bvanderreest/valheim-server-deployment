@@ -315,27 +315,66 @@ def _net_traffic(net: list[dict], span_hours: float) -> dict:
 
 # ── configuration ─────────────────────────────────────────────────────────────
 
+# How many of the most recent gaps decide the cadence verdict. A window can
+# span a config change, and the median across the whole of it then describes a
+# setting that is no longer in force.
+CADENCE_RECENT = 10
+
+
 def _cfg_cadence(saves: list[dict], interval_s: Optional[int]) -> dict:
-    gaps = [saves[i + 1]["epoch"] - saves[i]["epoch"] for i in range(len(saves) - 1)]
+    """Is the running server actually honouring SAVE_INTERVAL?
+
+    Judged on the MOST RECENT gaps, not on the window's median. The first
+    version used the median across the whole window and, two hours after
+    SAVE_INTERVAL went from 5 min to 30, reported the live server as
+    misconfigured over a 24 h window — 260 gaps, 250 of them from the old
+    setting. That is a false alarm pointing at a setting that is already
+    correct, which is worse than no check: it sends the operator to "fix"
+    something that is not broken.
+
+    A cadence change inside the window is itself worth saying, so it is
+    reported as evidence rather than allowed to poison the verdict.
+    """
+    ordered = sorted(saves, key=lambda s: s["epoch"])
+    gaps = [ordered[i + 1]["epoch"] - ordered[i]["epoch"] for i in range(len(ordered) - 1)]
     gaps = [g for g in gaps if g > 0]
     if not gaps or not interval_s:
         return _f("configuration", "save-cadence", UNKNOWN,
                   "Not enough saves to check the cadence against the setting.",
                   [("Saves", str(len(saves))), ("SAVE_INTERVAL", str(interval_s or "unknown"))],
                   "Compares the observed gap between saves with the configured interval.")
-    med = st.median(gaps)
+
+    recent = gaps[-CADENCE_RECENT:]
+    med = st.median(recent)
     ratio = med / interval_s
     v = OK if 0.9 <= ratio <= 1.1 else WATCH if 0.5 <= ratio <= 1.5 else PROBLEM
-    head = ("Saves are landing exactly on the configured interval."
-            if v == OK else
-            f"Saves are landing every {med/60:.0f} min, but SAVE_INTERVAL is "
-            f"{interval_s/60:.0f} min — the setting is not what is driving them.")
-    return _f("configuration", "save-cadence", v, head,
-              [("Observed gap (median)", f"{med/60:.1f} min"),
-               ("SAVE_INTERVAL", f"{interval_s/60:.0f} min"),
-               ("Ratio", f"{ratio:.2f}×"),
-               ("Gaps measured", str(len(gaps)))],
-              "If these disagree, the running server is not using the .env you are reading — "
+
+    earlier = gaps[:-CADENCE_RECENT]
+    changed = None
+    if len(earlier) >= 3:
+        emed = st.median(earlier)
+        if abs(emed - med) > 0.25 * max(emed, med):
+            changed = emed
+
+    if v == OK:
+        head = "Saves are landing exactly on the configured interval."
+        if changed:
+            head += (f" The cadence changed during this window — it was every "
+                     f"{changed/60:.0f} min earlier on.")
+    else:
+        head = (f"Saves are landing every {med/60:.0f} min, but SAVE_INTERVAL is "
+                f"{interval_s/60:.0f} min — the setting is not what is driving them.")
+
+    ev = [("Recent gap (median)", f"{med/60:.1f} min over the last {len(recent)}"),
+          ("SAVE_INTERVAL", f"{interval_s/60:.0f} min"),
+          ("Ratio", f"{ratio:.2f}×")]
+    if changed:
+        ev.append(("Earlier in this window", f"{changed/60:.1f} min over {len(earlier)} gaps"))
+    ev.append(("Gaps in window", str(len(gaps))))
+    return _f("configuration", "save-cadence", v, head, ev,
+              "Judged on the most recent gaps, because a window can span a config change and "
+              "the older gaps then describe a setting no longer in force. If recent and "
+              "configured disagree, the running server is not using the .env you are reading — "
               "the single most common reason a config change appears to do nothing.")
 
 
