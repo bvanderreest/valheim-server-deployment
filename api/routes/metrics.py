@@ -12,6 +12,7 @@ Exposes:
 
 import re
 import time
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +23,82 @@ from ..config import settings
 from ..routes.server import _get_uptime_seconds, _is_running, _read_pid, _get_player_info
 
 router = APIRouter(tags=["metrics"])
+
+
+# ── Main-thread stalls ────────────────────────────────────────────────────────
+# These are what a player actually FEELS. Everything else about server health is
+# academic if the world freezes. Two independent sources, both from the log:
+#
+#   save stall  PrepareSave clone + ZDOExtraData — the blocking part of a save.
+#               The rest of the ~4s "World saved" figure is background I/O.
+#   GC pause    Unity's periodic Resources.UnloadUnusedAssets(). Runs roughly
+#               hourly, dominated by MarkObjects scanning ~200k loaded objects,
+#               and typically frees almost nothing. Not tunable server-side.
+#
+# The point of exposing both: when a player reports lag at a given minute, you
+# can say whether the SERVER stalled then. If it did not, the problem is the
+# player's network — which is the question a geographically spread group always
+# ends up asking.
+
+_RE_SAVE_CLONE = re.compile(r"PrepareSave: clone done in (\d+)ms")
+_RE_SAVE_ZDO = re.compile(r"ZDOExtraData\.PrepareSave done in (\d+) ?ms")
+_RE_SAVE_TOTAL = re.compile(r"World saved \(\s*([0-9.]+)ms\s*\)")
+_RE_GC_TOTAL = re.compile(r"^Total: ([0-9.]+) ms \(FindLiveObjects")
+_RE_LOADED = re.compile(r"Loaded Objects now: (\d+)")
+_RE_CONN = re.compile(r"Connections (\d+) ZDOS:(\d+)\s+sent:(\d+) recv:(\d+)")
+
+
+def _tail_lines(n: int = 3000) -> list[str]:
+    try:
+        with settings.logfile.open(errors="replace") as f:
+            return deque(f, maxlen=n)
+    except OSError:
+        return []
+
+
+def _stall_metrics() -> dict[str, float]:
+    """Last observed value for each stall/traffic signal. -1 means not seen."""
+    out = {
+        "save_stall_seconds": -1.0,
+        "save_duration_seconds": -1.0,
+        "gc_pause_seconds": -1.0,
+        "loaded_objects": -1.0,
+        "world_zdos": -1.0,
+        "net_sent_bytes": -1.0,
+        "net_recv_bytes": -1.0,
+    }
+    clone = zdo = None
+    for line in _tail_lines():
+        if (m := _RE_SAVE_CLONE.search(line)):
+            clone = int(m.group(1))
+        elif (m := _RE_SAVE_ZDO.search(line)):
+            zdo = int(m.group(1))
+            if clone is not None:
+                # Both halves of one PrepareSave; this is the frozen window.
+                out["save_stall_seconds"] = (clone + zdo) / 1000
+        elif (m := _RE_SAVE_TOTAL.search(line)):
+            out["save_duration_seconds"] = float(m.group(1)) / 1000
+        elif (m := _RE_GC_TOTAL.match(line)):
+            out["gc_pause_seconds"] = float(m.group(1)) / 1000
+        elif (m := _RE_LOADED.search(line)):
+            out["loaded_objects"] = float(m.group(1))
+        elif (m := _RE_CONN.search(line)):
+            out["world_zdos"] = float(m.group(2))
+            out["net_sent_bytes"] = float(m.group(3))
+            out["net_recv_bytes"] = float(m.group(4))
+    return out
+
+
+def _rss_bytes(pid: int | None) -> int:
+    if not pid:
+        return -1
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("VmRSS:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    return -1
 
 
 def _gauge(name: str, value: float | int, help_text: str = "") -> str:
@@ -86,5 +163,25 @@ async def get_metrics() -> str:
         _gauge("valheim_backup_count", _backup_count(), "Number of world backup archives on disk"),
         _gauge("valheim_world_size_bytes", _world_size_bytes(), "Size of the world .db file in bytes"),
         _gauge("valheim_last_save_age_seconds", _last_save_age_seconds(), "Seconds since last world save (-1 if unknown)"),
+    ]
+
+    # Stall + traffic signals. All -1 when not yet observed, never 0 — zero is a
+    # legitimate value for several of these and would read as "no stall" rather
+    # than "no data", which is the failure mode that makes a dashboard lie.
+    st = _stall_metrics()
+    blocks += [
+        _gauge("valheim_save_stall_seconds", st["save_stall_seconds"],
+               "Main-thread freeze during the last save (PrepareSave clone + ZDOExtraData). This is the part players feel."),
+        _gauge("valheim_save_duration_seconds", st["save_duration_seconds"],
+               "Total wall time of the last world save, most of which is background I/O"),
+        _gauge("valheim_gc_pause_seconds", st["gc_pause_seconds"],
+               "Last Unity UnloadUnusedAssets pause. Runs roughly hourly and blocks the main thread."),
+        _gauge("valheim_loaded_objects", st["loaded_objects"],
+               "Unity objects resident. Drives GC pause length."),
+        _gauge("valheim_world_zdos", st["world_zdos"],
+               "ZDOs in the world. Drives save cost."),
+        _gauge("valheim_net_sent_bytes", st["net_sent_bytes"], "Bytes sent, from the periodic Connections line"),
+        _gauge("valheim_net_recv_bytes", st["net_recv_bytes"], "Bytes received, from the periodic Connections line"),
+        _gauge("valheim_process_rss_bytes", _rss_bytes(pid), "Resident memory of the server process (-1 if unknown)"),
     ]
     return "\n".join(blocks) + "\n"
