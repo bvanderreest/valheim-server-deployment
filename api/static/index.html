@@ -1446,8 +1446,8 @@ function renderVerdict(d){
     const which = (d.gc.max_ms || 0) >= (d.save.max_ms || 0) ? 'gc' : 'save';
     setVerdict('warn', `Freezes are reaching ${fmtMs(worst)} — long enough to be obvious.`,
       which === 'gc'
-        ? [`The longest was a GC pause. It scales with loaded objects (${num(d.context.loaded_objects)} right now), and Valheim keeps a zone loaded for every player — so the more spread out the group, the longer it runs.`,
-           `<b>No server-side lever.</b> No launch flag exposes Unity's unload cycle. What moves it is fewer loaded zones: players closer together, and fewer built structures across the map.`]
+        ? [`The longest was a GC pause — Unity's hourly unload, walking ${num(d.context.loaded_objects)} loaded objects.`,
+           `<b>No server-side lever.</b> No launch flag exposes Unity's unload cycle, and it runs on a fixed internal timer whatever the server is doing.`]
         : [`The longest was a save stall. ${frozen}.`,
            `<b>Lever:</b> <span class="mono">SAVE_INTERVAL</span> controls how often this happens, not how long it takes. Length is driven by the world's ${num(d.context.world_zdos)} objects.`]);
     return;
@@ -1642,7 +1642,7 @@ function renderPerfContext(){
     `<b>Save stall</b> — how OFTEN is <span class="mono">SAVE_INTERVAL</span>`
     + (d.save_interval_s ? ` (now ${Math.round(d.save_interval_s/60)} min)` : '')
     + `. How LONG is the world's ${num(c.world_zdos)} objects, and that only shrinks by demolishing things.<br><br>`
-    + `<b>GC pause</b> — no server-side lever exists. It scales with loaded objects (${num(c.loaded_objects)}), and Valheim keeps a zone loaded per player, so a group spread across the map loads more than the same group standing together.<br><br>`
+    + `<b>GC pause</b> — no server-side lever exists, and no launch flag exposes it. Measured here: hourly on a fixed timer, ~630 ms, four fifths of it walking the object graph, and it reclaims <b>nothing</b> — 289 of 290 runs freed zero assets, flat across 290 h of uptime, so a restart does not help either. Whether it grows when players spread across the map is untested: every sample so far has nobody on and ${num(c.loaded_objects)} loaded objects that never move.<br><br>`
     + `<b>Neither is network.</b> If a freeze is here, everyone online hits it at the same second. If only one person lagged, this panel will show nothing at that time — and that is the finding, not a gap.`;
 }
 
