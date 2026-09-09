@@ -30,10 +30,53 @@ _RESTART_REQUIRED_KEYS: frozenset[str] = frozenset({
 _MAX_BACKUPS = 10
 
 
+MASK = "****"
+
+
 def _mask(key: str, value: str) -> str:
     if "password" in key.lower():
-        return "****"
+        return MASK
     return value
+
+
+def _validate(changes: dict[str, str]) -> None:
+    """Reject values that would break the server or lock everyone out.
+
+    GET /config masks PASSWORD as "****". A UI that renders that into an input
+    and posts the form back would set the real password TO "****" — nobody
+    could join, and the cause would be invisible. Refuse the sentinel outright;
+    a client that means "unchanged" must omit the key.
+    """
+    pw = changes.get("PASSWORD")
+    if pw is not None:
+        if pw == MASK:
+            raise HTTPException(
+                status_code=422,
+                detail=f'PASSWORD cannot be set to "{MASK}" — that is the mask '
+                       "returned by GET /config, not a value. Omit the key to "
+                       "leave the password unchanged.",
+            )
+        # Valheim's own rules; violating them makes the server refuse to start.
+        if len(pw) < 5:
+            raise HTTPException(status_code=422, detail="PASSWORD must be at least 5 characters.")
+        world = changes.get("WORLD_NAME") or _read_env(settings.script_dir / ".env").get("WORLD_NAME", "")
+        if world and (pw in world or world in pw):
+            raise HTTPException(
+                status_code=422,
+                detail="PASSWORD must not contain, or be contained in, the world name — "
+                       "Valheim refuses to start.",
+            )
+
+    for key in ("PORT", "MAX_PLAYERS", "SAVE_INTERVAL", "BACKUPS_KEEP"):
+        if key in changes:
+            try:
+                n = int(changes[key])
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=422, detail=f"{key} must be an integer.") from None
+            if key == "PORT" and not (1024 <= n <= 65535):
+                raise HTTPException(status_code=422, detail="PORT must be between 1024 and 65535.")
+            if key != "PORT" and n < 1:
+                raise HTTPException(status_code=422, detail=f"{key} must be 1 or greater.")
 
 
 def _read_env(env_file: Path) -> dict[str, str]:
@@ -124,11 +167,13 @@ async def patch_config(
                    f"Allowed keys: {sorted(_EDITABLE_KEYS)}",
         )
 
+    _validate(body.changes)
+
     env_file = settings.script_dir / ".env"
     _write_env_atomic(env_file, body.changes)
 
     restart_required = bool(set(body.changes) & _RESTART_REQUIRED_KEYS)
     return ConfigUpdateResponse(
-        applied=body.changes,
+        applied={k: _mask(k, v) for k, v in body.changes.items()},
         restart_required=restart_required,
     )
