@@ -123,9 +123,13 @@ def test_console_is_public_but_the_api_is_not():
 
 
 def test_console_targets_the_versioned_routes():
-    """A console pinned to the legacy bare paths would silently miss /v1."""
+    """A console pinned to the legacy bare paths would silently miss /v1.
+
+    Note the base is DERIVED, not a constant — see
+    test_console_derives_its_api_base_from_the_served_path — so this asserts
+    the /v1 suffix rather than a literal path."""
     html = client.get("/").text
-    assert "const API_BASE = '/v1'" in html
+    assert "const API_BASE = BASE + '/v1'" in html
 
 
 def test_console_is_a_wellformed_document():
@@ -267,3 +271,24 @@ def test_console_separates_key_rejected_from_unreachable():
     assert "r.status === 0" in html, "transport failure must be handled distinctly"
     assert "Lost contact with the server." in html
     assert "last known values, not current" in html, "stale figures must be labelled stale"
+
+
+# ─── console must be proxy-able under a subpath ──────────────────────────────
+
+def test_console_derives_its_api_base_from_the_served_path():
+    """The Portal cannot always give a game a subdomain — a server may only be
+    reachable as a bare http://10.0.0.1:8080, so SUBPATH proxying must work.
+
+    A root-absolute API base would resolve against the PORTAL's root and
+    silently call the wrong server, failing in a way that looks like the game
+    API being down."""
+    html = client.get("/").text
+    assert "new URL('.', location.href).pathname" in html, "base must be derived, not constant"
+    assert "const API_BASE = BASE + '/v1'" in html
+    assert "const HEALTH_URL = BASE + '/health'" in html
+
+
+def test_console_has_no_root_absolute_api_calls_left():
+    html = client.get("/").text
+    for bad in ("fetch('/health')", 'fetch("/health")', "const API_BASE = '/v1'"):
+        assert bad not in html, f"root-absolute call still present: {bad}"
