@@ -352,6 +352,42 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
 @starting-style{.toast{opacity:0;transform:translateY(100%)}}
 
 /* ---------- responsive ---------- */
+/* ── Mobile navigation ───────────────────────────────────────────────────────
+   The header was a single flex row with .nav{overflow-x:auto}. On a phone the
+   brand, theme switch and Lock button won the space and the tabs collapsed
+   into a horizontally scrolling sliver — navigation hidden behind a gesture
+   with no affordance. Under the Portal, which adds its own chrome, it would
+   only get worse.
+
+   Below 720px the header wraps and the nav becomes a full-width equal-column
+   grid on its own row: every view visible, nothing scrolls, each target well
+   over the 24px minimum. */
+@media (max-width:720px){
+  .top{height:auto;flex-wrap:wrap;padding:8px 12px;row-gap:8px;align-items:center}
+  .brand{flex:1 1 auto;min-width:0}
+  .nav{
+    order:3;
+    flex:1 0 100%;
+    margin-left:0;
+    display:grid;
+    grid-auto-flow:column;
+    grid-auto-columns:1fr;
+    gap:4px;
+    overflow-x:visible;          /* was auto — the whole problem */
+  }
+  .nav button{
+    padding:9px 4px;
+    text-align:center;
+    white-space:normal;          /* let a long label wrap rather than clip */
+    line-height:1.15;
+    font-size:12.5px;
+    min-height:36px;
+  }
+}
+/* Very narrow: two rows of tabs rather than five cramped columns. */
+@media (max-width:400px){
+  .nav{grid-auto-flow:row;grid-template-columns:repeat(3,1fr)}
+}
 @media (max-width:900px){
   .frame{grid-template-columns:1fr}
   .rail{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line);padding:18px 16px 20px}
