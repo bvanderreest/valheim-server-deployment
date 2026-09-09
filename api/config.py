@@ -42,6 +42,11 @@ class Settings(BaseSettings):
     # Paths — read LOG_DIR and PIDFILE from existing .env; logfile is derived
     log_dir: Path = Path("/srv/valheim/logs")
     pidfile: Path = Path("/srv/valheim/valheim.pid")
+    # SAVEDIR and BACKUP_DIR are already in .env for the shell layer; the API
+    # needs them to report world size and backup age, which a console cannot
+    # derive from anything else.
+    savedir: Path = Path("/srv/valheim/worlds")
+    backup_dir: Path = Path("/srv/valheim/backups")
 
     # logfile is computed from log_dir unless explicitly overridden via LOGFILE_OVERRIDE
     logfile_override: Optional[Path] = None
