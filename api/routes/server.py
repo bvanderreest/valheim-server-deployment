@@ -206,6 +206,24 @@ def _backups() -> list[dict]:
     return out
 
 
+def _public_endpoint() -> str | None:
+    """The address crossplay players actually connect to.
+
+    With -crossplay the server registers a PUBLIC endpoint with PlayFab and
+    logs it. _get_server_ip() returns the LAN address, which is correct for a
+    Steam-direct connection on the same network and useless to anyone outside
+    it. Prefer what the server told PlayFab.
+    """
+    for line in reversed(_tail_log(4000)):
+        m = re.search(r"serverIP used to register the server:\s*([0-9.]+:[0-9]+)", line)
+        if m:
+            return m.group(1)
+        m = re.search(r"Register PlayFab server .* with IP\s*([0-9.]+:[0-9]+)", line)
+        if m:
+            return m.group(1)
+    return None
+
+
 def _get_join_code() -> Optional[str]:
     # The code is issued once at startup, so a 200-line tail loses it as soon
     # as the server logs anything. Scan a much deeper window, and fall back to
@@ -328,6 +346,9 @@ async def get_status() -> StatusResponse:
             "world_objects": _world_objects() if running else None,
             "world_bytes": _world_bytes(),
             "backups": _backups(),
+            # What a crossplay player connects to, as registered with PlayFab.
+            # connection.ip stays the LAN address for Steam-direct joins.
+            "public_endpoint": _public_endpoint() if running else None,
         },
         deprecated={
             "ip": ip,
