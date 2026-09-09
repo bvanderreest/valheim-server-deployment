@@ -117,3 +117,57 @@ class ModActionResponse(BaseModel):
     action: str  # "enabled" | "disabled" | "deleted"
     success: bool
     message: str
+
+
+class StallEvent(BaseModel):
+    """One main-thread freeze, placed in time."""
+
+    kind: str  # "save" | "gc"
+    epoch: float
+    ms: float
+    # False for GC events: Unity writes those lines with no timestamp, so the
+    # time is inferred from the last timestamped line above. Surfaced rather
+    # than hidden — a timeline that implies precision it lacks is worse than
+    # one that admits the estimate.
+    exact: bool
+    total_ms: Optional[float] = None  # save only: wall time incl. background I/O
+    objects: Optional[int] = None  # gc only: loaded objects scanned
+
+
+class StallSummary(BaseModel):
+    count: int
+    per_hour: Optional[float] = None
+    p50_ms: Optional[float] = None
+    p95_ms: Optional[float] = None
+    max_ms: Optional[float] = None
+    total_ms: float
+    last_epoch: Optional[float] = None
+
+
+class StallContext(BaseModel):
+    world_zdos: Optional[int] = None
+    loaded_objects: Optional[int] = None
+    players: Optional[int] = None
+    net_sent_bytes: Optional[int] = None
+    net_recv_bytes: Optional[int] = None
+
+
+class PerformanceResponse(BaseModel):
+    generated_at: float
+    window_hours: float
+    log_file: str
+    # The part of the window the log actually covers. Rates are computed over
+    # THIS, not over window_hours — a server restarted ten minutes ago has been
+    # observed for ten minutes, not six hours.
+    log_covers_from: Optional[float] = None
+    log_covers_to: Optional[float] = None
+    observed_hours: float
+    truncated: bool
+    events: list[StallEvent]
+    save: StallSummary
+    gc: StallSummary
+    blocked_ms: float
+    blocked_ms_per_hour: Optional[float] = None
+    blocked_pct: Optional[float] = None
+    save_interval_s: Optional[int] = None
+    context: StallContext

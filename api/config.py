@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     # deploy() writes SERVER_DIR into .env; this default matches its layout.
     server_dir: Path = Path(__file__).resolve().parents[1] / "server"
 
+    # Autosave cadence, from the same .env the shell layer reads. The API needs
+    # it to say how OFTEN the world freezes, which is the number that matters
+    # more than how long each freeze lasts: a 0.6s stall twelve times an hour is
+    # felt as "the server is laggy"; the same stall twice an hour is not.
+    save_interval: int = 300
+
     # logfile is computed from log_dir unless explicitly overridden via LOGFILE_OVERRIDE
     logfile_override: Optional[Path] = None
 
@@ -111,7 +117,7 @@ class Settings(BaseSettings):
     model_config = {
         "env_file": Path(__file__).parent.parent / ".env",
         "env_file_encoding": "utf-8",
-        # Ignore bash-specific vars (SERVER_DIR, BINARY, SAVE_INTERVAL, etc.)
+        # Ignore bash-specific vars (SERVER_DIR, BINARY, etc.)
         "extra": "ignore",
     }
 
