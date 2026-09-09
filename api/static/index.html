@@ -686,7 +686,23 @@ function doStart(){ S.running=true; S.pid=newPid(); S.joinCode=newCode(); S.star
 // Same shape as the mock: every call resolves to {status, body} and never
 // throws, so callers handle transport failure the same way they handle a 500.
 // Routes go to /v1 (see issue #80); /health stays unversioned.
-const API_BASE = '/v1';
+// Derive the API base from WHERE THIS PAGE WAS SERVED, never from a constant.
+//
+// This console must work in two shapes:
+//   standalone   https://host:8080/                -> base ''          -> /v1/...
+//   proxied      https://portal/s/lowood-au/       -> base '/s/lowood-au' -> /s/lowood-au/v1/...
+//
+// The Portal cannot always use a subdomain — a game server may only be
+// reachable as a bare http://10.0.0.1:8080 with no hostname and no TLS — so
+// subpath proxying has to work. Root-absolute paths would resolve against the
+// PORTAL's root and silently call the wrong server, which fails looking like
+// "the game API is down".
+//
+// Requires the page to be served WITH a trailing slash when under a subpath;
+// serving /s/lowood-au (no slash) would resolve the base one level too high.
+const BASE = new URL('.', location.href).pathname.replace(/\/$/, '');
+const API_BASE = BASE + '/v1';
+const HEALTH_URL = BASE + '/health';
 
 const realApi = {
   async _req(method, path, key, body){
@@ -711,7 +727,7 @@ const realApi = {
   // /health is unversioned and unauthenticated — an infrastructure probe.
   async health(){
     try {
-      const r = await fetch('/health');
+      const r = await fetch(HEALTH_URL);
       if (r.ok) return await r.json();
     } catch { /* fall through */ }
     return { status: 'unreachable', server_type: 'valheim', server_label: 'Server' };
@@ -804,7 +820,7 @@ let LIVE = false;
 
 async function detectMode(){
   try {
-    const res = await fetch('/health', { method: 'GET' });
+    const res = await fetch(HEALTH_URL, { method: 'GET' });
     if (res.ok){
       const b = await res.json();
       if (b && b.status === 'ok'){ api = realApi; LIVE = true; }
