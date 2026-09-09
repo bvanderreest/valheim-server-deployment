@@ -152,6 +152,30 @@ class StallContext(BaseModel):
     net_recv_bytes: Optional[int] = None
 
 
+class FindingEvidence(BaseModel):
+    label: str
+    value: str
+    # A timestamp is sent as an epoch, never pre-formatted: the server is in AU
+    # and half the group is not, so the reader's browser has to render it.
+    epoch: Optional[float] = None
+
+
+class Finding(BaseModel):
+    """A judgement with the numbers that produced it.
+
+    `evidence` is not decoration: a reader has to be able to disagree with the
+    verdict and still use the measurement. `method` says how it was judged, so
+    an inferred claim can never be mistaken for a measured one.
+    """
+
+    domain: str  # "hardware" | "network" | "configuration"
+    id: str
+    verdict: str  # "problem" | "watch" | "ok" | "unknown"
+    headline: str
+    evidence: list[FindingEvidence]
+    method: str
+
+
 class PerformanceResponse(BaseModel):
     generated_at: float
     window_hours: float
@@ -171,3 +195,5 @@ class PerformanceResponse(BaseModel):
     blocked_pct: Optional[float] = None
     save_interval_s: Optional[int] = None
     context: StallContext
+    findings: list[Finding] = []
+    log_files_read: int = 1
