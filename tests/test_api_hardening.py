@@ -168,3 +168,58 @@ def test_console_ago_handles_iso_strings():
     html = client.get("/").text
     assert "Date.parse(t)" in html
     assert "Number.isFinite(ms)" in html
+
+
+def test_console_reads_the_fields_the_api_actually_sends():
+    """Contract check. The console once read world_size_mb and treated
+    backups as a count, while /status sends world_bytes and a list —
+    rendering 'undefined MB' and '[object Object]' against the live API.
+    A shape assumption is not a contract."""
+    html = client.get("/").text
+    assert "x.world_bytes" in html, "console must read world_bytes"
+    # Check for USAGE, not mention — the source explains the old field name in
+    # a comment, and a test that cannot tell those apart forces bad comments.
+    assert "x.world_size_mb" not in html, "console still reads the stale field"
+    assert "count(x.backups)" in html, "backups is a list, not a count"
+
+
+# ─── config validation (#the password trap) ──────────────────────────────────
+
+def test_password_cannot_be_set_to_the_mask(tmp_path, monkeypatch):
+    """GET /config returns '****'. A UI that renders that into an input and
+    posts it back would set the real password TO '****' and lock everyone out,
+    with no visible cause. Refuse the sentinel."""
+    r = client.patch("/v1/config", json={"changes": {"PASSWORD": "****"}}, headers=HEADERS)
+    assert r.status_code == 422
+    assert "mask" in r.json()["detail"].lower()
+
+
+def test_password_length_is_enforced():
+    r = client.patch("/v1/config", json={"changes": {"PASSWORD": "abc"}}, headers=HEADERS)
+    assert r.status_code == 422
+    assert "5 characters" in r.json()["detail"]
+
+
+def test_port_range_is_enforced():
+    r = client.patch("/v1/config", json={"changes": {"PORT": "80"}}, headers=HEADERS)
+    assert r.status_code == 422
+    assert "PORT" in r.json()["detail"]
+
+
+def test_console_does_not_prefill_the_password():
+    html = client.get("/").text
+    assert 'type="password" name="${k}" value=""' in html, "password input must render empty"
+    assert "type === 'password' && (v === '' || v === '****')" in html, "submit must omit blank/mask"
+
+
+def test_console_normalises_plain_string_log_lines():
+    """/logs returns plain strings; the mock stored objects, so reading .msg
+    off a string printed 'undefined' for every line."""
+    html = client.get("/").text
+    assert "function normLine(" in html
+    assert "typeof l === 'string'" in html
+
+
+def test_console_uses_the_real_ip_not_the_mock_constant():
+    html = client.get("/").text
+    assert "s.connection.ip" in html, "Listening must come from /status"

@@ -635,7 +635,19 @@ const S = {
   running:true, pid:48213, startedAt: now() - 12*60*1000, version:'l-0.221.12', joinCode:'366974',
   lastSave: now() - 4*60*1000, players:[],
   config:{ SERVER_NAME:'Lowood-AU', WORLD_NAME:'CrowsNest', PASSWORD:'valhalla-gate', PORT:2456, PUBLIC:true, CROSSPLAY:true, MAX_PLAYERS:10, SAVE_INTERVAL:1800, BACKUPS_KEEP:6 },
-  extras:{ rss_mb:1324, world_objects:419858, world_size_mb:19.3, save_seconds:4.6, backups:6 },
+  // MUST mirror the real /status extras exactly. When this drifted — emitting
+  // world_size_mb and a backup COUNT while the API sends world_bytes and a
+  // LIST — the console rendered "undefined MB" and "[object Object]" against
+  // the live server while every mock-backed check passed. A mock that does not
+  // match the contract validates nothing.
+  extras:{ crossplay:true, public:true, rss_mb:1343.9, world_objects:419858,
+           world_bytes:19453633, save_seconds:4.4,
+           backups:[
+             {name:'world-CrowsNest-2026-09-08_12-55-10.tar.gz', bytes:146500000, modified:'2026-09-08T12:55:28Z'},
+             {name:'world-CrowsNest-2026-09-08_12-01-55.tar.gz', bytes:146434680, modified:'2026-09-08T12:02:10Z'},
+             {name:'pre-1.0-2026-09-08-1124.tar.gz',            bytes:146437012, modified:'2026-09-08T11:25:02Z'},
+             {name:'world-CrowsNest-2026-06-13_18-16-20.tar.gz', bytes:20919621,  modified:'2026-06-13T08:16:20Z'},
+           ] },
   mod:{ preset:'normal', enable_modifiers:true, modifiers:{ Combat:'easy', DeathPenalty:'easy', Resources:'more', Raids:'less', Portals:'casual' }, setkeys:{ toggles:[], numeric:{} } },
   restartRequired:false, mods:[], logs:[], transition:null,
 };
@@ -880,6 +892,12 @@ function renderStatus(){
 // Accepts epoch millis OR an ISO 8601 string. The mock supplied numbers; the
 // real API returns ISO ("2026-09-08T11:56:08Z"), so subtracting it from a
 // number produced "NaN h NaN min ago" against the live server.
+// Null-safe formatters. /status returns null for runtime figures when the
+// server is stopped, and `backups` is a LIST of objects, not a count —
+// assuming otherwise rendered "undefined MB" and "[object Object]" live.
+function num(v){ return typeof v === 'number' ? v.toLocaleString() : '—'; }
+function mb(bytes){ return typeof bytes === 'number' ? `${(bytes/1048576).toFixed(1)} MB` : '—'; }
+function count(v){ return Array.isArray(v) ? v.length : (typeof v === 'number' ? v : 0); }
 function ago(t){
   if (t === null || t === undefined || t === '') return '—';
   const ms = typeof t === 'number' ? t : Date.parse(t);
@@ -963,8 +981,8 @@ function renderOverview(){
   $('#o-players').innerHTML = s.players.count ? s.players.names.map(n=>`<div class="player"><span class="dot on"></span>${esc(n)}</div>`).join('') : `<p class="players-empty">Nobody is on. ${s.running ? 'The server is up and listed — the join code on the left gets them in.' : 'The server is stopped.'}</p>`;
   $('#o-slots').textContent = `${s.players.count} / ${s.players.max}`; $('#o-slotfill').style.width = (100*s.players.count/s.players.max)+'%';
   const x = s.extras;
-  $('#o-world').innerHTML = kv([['Objects', x.world_objects.toLocaleString()],['Save file', `${x.world_size_mb} MB`],['Last save', ago(s.last_save)],['A save takes', `${x.save_seconds} s`],['Backups kept', `${x.backups} of ${S.config.BACKUPS_KEEP}`],['Autosave every', `${S.config.SAVE_INTERVAL/60} min`]]);
-  $('#o-proc').innerHTML = kv([['State', s.running?'running':'stopped'],['Process', s.pid?`pid ${s.pid}`:'—'],['Uptime', s.running?s.uptime_human:'—'],['Memory (RSS)', s.running?`${(x.rss_mb/1024).toFixed(1)} GB`:'—'],['Version', s.version],['Listening', `${ip}:${s.connection.port}`]]);
+  $('#o-world').innerHTML = kv([['Objects', num(x.world_objects)],['Save file', mb(x.world_bytes)],['Last save', ago(s.last_save)],['A save takes', x.save_seconds == null ? '—' : `${x.save_seconds} s`],['Backups kept', `${count(x.backups)} of ${S.config.BACKUPS_KEEP ?? '?'}`],['Autosave every', `${S.config.SAVE_INTERVAL/60} min`]]);
+  $('#o-proc').innerHTML = kv([['State', s.running?'running':'stopped'],['Process', s.pid?`pid ${s.pid}`:'—'],['Uptime', s.running?s.uptime_human:'—'],['Memory (RSS)', s.running?`${(x.rss_mb/1024).toFixed(1)} GB`:'—'],['Version', s.version],['Listening', `${s.connection.ip ?? ip}:${s.connection.port}`]]);
   const m = S.mod; const eff = effective(m);
   const parts = [`Preset <b>${m.preset||'none'}</b>`];
   MOD_ORDER.forEach(k => { const o = m.modifiers[k]; if (o) parts.push(`${MOD_LABEL[k]} <b>${pretty(o)}</b> <span class="faint">(override)</span>`); });
@@ -1110,7 +1128,11 @@ function renderConfig(){
   f.innerHTML = CFG.map(([k,label,type,rr,hint]) => {
     const v = cfg[k]; let ctl;
     if (type === 'bool') ctl = `<button type="button" class="switch" role="switch" aria-checked="${v}" data-cfg="${k}" aria-label="${label}"></button>`;
-    else if (type === 'password') ctl = `<div class="inrow"><input class="input" type="password" name="${k}" value="${esc(v)}" autocomplete="off"><button type="button" class="btn sm" data-reveal aria-pressed="false">Show</button></div>`;
+    // GET /config returns "****" for passwords — a MASK, not the value.
+    // Rendering it into the input showed "****" as though it were the password,
+    // and posting the form back would have set the password TO "****". Leave it
+    // empty and say so; the submit handler omits it when blank.
+    else if (type === 'password') ctl = `<div class="inrow"><input class="input" type="password" name="${k}" value="" placeholder="Hidden \u2014 type a new one to change it" autocomplete="off"><button type="button" class="btn sm" data-reveal aria-pressed="false">Show</button></div>`;
     else ctl = `<input class="input ${type==='number'?'num':''}" type="${type}" name="${k}" value="${esc(v)}">`;
     return `<div class="field"><label for="cfg-${k}">${label}${rr?'<span class="needs">restart</span>':''}</label>${ctl}${hint?`<div class="hint">${esc(hint)}</div>`:''}</div>`;
   }).join('') + `<div class="form-foot"><button class="btn primary" type="submit">Save settings</button><span class="faint" id="cfg-msg"></span></div>`;
@@ -1119,7 +1141,7 @@ function renderConfig(){
 }
 $('#cfg-form').addEventListener('submit', async e => {
   e.preventDefault(); const f = e.currentTarget; const changes = {};
-  CFG.forEach(([k,,type]) => { let v; if (type === 'bool') v = $(`[data-cfg="${k}"]`, f).getAttribute('aria-checked') === 'true'; else { v = f.elements[k].value; if (type === 'number') v = Number(v); } if (v !== cfg[k]) changes[k] = v; });
+  CFG.forEach(([k,,type]) => { let v; if (type === 'bool') v = $(`[data-cfg="${k}"]`, f).getAttribute('aria-checked') === 'true'; else { v = f.elements[k].value; if (type === 'number') v = Number(v); } if (type === 'password' && (v === '' || v === '****')) return; if (v !== cfg[k]) changes[k] = v; });
   if (!Object.keys(changes).length){ toast('Nothing changed.'); return; }
   const r = await api.patch('/config', KEY, { changes });
   if (r.status !== 200){ toast(`Not saved (${r.status}): ${r.body.detail}.`); return; }
@@ -1131,7 +1153,17 @@ $('#cfg-form').addEventListener('submit', async e => {
 /* ===================== LOGS ===================== */
 let following = true;
 const logbox = $('#logbox');
-function fmtLine(l){ const cls = l.cls || (/error|exception/i.test(l.msg) ? 'err' : /warn/i.test(l.msg) ? 'warn' : ''); return `<span class="ln ${cls}">${esc(stamp(l.t))}: ${esc(l.msg).replace(/(join code \d{6})/, '<b>$1</b>')}</span>`; }
+// /logs returns an array of PLAIN STRINGS ("09/09/2026 15:43:02: Saved 419858
+// ZDOs"). The mock stored {t,msg,cls} objects, so reading .msg off a string
+// printed "undefined" for every line against the live server. Normalise first.
+function normLine(l){
+  if (typeof l === 'string'){
+    const m = l.match(/^(\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}):\s?(.*)$/);
+    return m ? { t: null, raw: m[1], msg: m[2] } : { t: null, raw: '', msg: l };
+  }
+  return { t: l.t ?? null, raw: null, msg: l.msg ?? '', cls: l.cls };
+}
+function fmtLine(line){ const l = normLine(line); const cls = l.cls || (/error|exception/i.test(l.msg) ? 'err' : /warn/i.test(l.msg) ? 'warn' : ''); return `<span class="ln ${cls}">${esc(l.raw ?? stamp(l.t))}: ${esc(l.msg).replace(/(join code \d{6})/, '<b>$1</b>')}</span>`; }
 async function loadLogs(){ const r = await api.get('/logs', KEY); logbox.innerHTML = r.body.lines.map(fmtLine).join(''); scrollLog(); }
 logListeners.add(l => { logbox.insertAdjacentHTML('beforeend', fmtLine(l)); if (following) scrollLog(); });
 function scrollLog(){ if (following) logbox.scrollTop = logbox.scrollHeight; }
