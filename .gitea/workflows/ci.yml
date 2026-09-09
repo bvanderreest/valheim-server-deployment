@@ -1,0 +1,101 @@
+name: CI
+
+# Every convention in this repo that only a human can check WILL drift.
+# This runs the checks that caught real bugs during the Sprint 007 work:
+# shellcheck, the shell safety suite, the API tests, and the secret guard.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  shell:
+    name: Shell — syntax, shellcheck, line endings
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+
+      - name: Syntax check every script
+        run: |
+          fail=0
+          for f in *.sh scripts/*.sh; do
+            [ -e "$f" ] || continue
+            if bash -n "$f"; then echo "ok   $f"; else echo "FAIL $f"; fail=1; fi
+          done
+          exit $fail
+
+      - name: CRLF guard
+        # api-manager.sh shipped with CRLF and could never execute — every
+        # invocation died at the shebang. .gitattributes prevents it now; this
+        # proves it, because a .gitattributes nobody verifies is a wish.
+        run: |
+          fail=0
+          for f in $(git ls-files -- '*.sh' '*.py' '*.conf' '*.service' '*.timer' '*.md' '*.txt' '*.yml' '*.yaml' '*.json' '.gitignore'); do
+            if grep -qU $'\r' "$f"; then echo "CRLF in $f"; fail=1; fi
+          done
+          [ $fail -eq 0 ] && echo "all tracked text files are LF"
+          exit $fail
+
+      - name: shellcheck (warning and above)
+        run: shellcheck -S warning *.sh scripts/*.sh
+
+  shell-tests:
+    name: Shell — safety tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: World-safety and backup tests
+        # These caught a wrong tar extraction target and a grep pattern that
+        # required a leading "./" the archives do not have.
+        run: bash tests/test_shell_safety.sh
+
+  api:
+    name: API — pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --quiet --upgrade pip
+          pip install --quiet -r api/requirements.txt pytest
+      - name: pytest
+        run: python -m pytest tests/ -q
+
+  secrets:
+    name: Secrets — nothing credential-shaped
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Guard must be executable and self-consistent
+        run: bash -n scripts/check-secrets.sh && test -x scripts/check-secrets.sh
+
+      - name: Files that must never be tracked
+        run: |
+          bad=$(git ls-files | grep -iE '^\.env$|^\.env\..*|\.pem$|(^|/)id_(rsa|ed25519)$' || true)
+          if [ -n "$bad" ]; then echo "tracked secret-bearing files:"; echo "$bad"; exit 1; fi
+          echo "none tracked"
+
+      - name: Scan the diff for credential-shaped content
+        # A pre-commit hook only protects the machine it is installed on.
+        run: |
+          base="${GITHUB_BASE_REF:-main}"
+          git fetch -q origin "$base" 2>/dev/null || true
+          range="origin/$base...HEAD"
+          git diff --cached --quiet 2>/dev/null || true
+          added=$(git diff "$range" -U0 2>/dev/null | grep -E '^\+' || true)
+          hits=$(echo "$added" | grep -EI '(PASSWORD|API_KEYS?|SECRET|TOKEN|PRIVATE_KEY)[[:space:]]*=[[:space:]]*"?[A-Za-z0-9/+_.-]{8,}"?' \
+                 | grep -vEi 'example|placeholder|your-|changeme|CHANGE_ME|xxx|\$\{|<|serverpassword123|Password12|test-api-key|demo-key' || true)
+          if [ -n "$hits" ]; then
+            echo "Credential-shaped content added (values redacted):"
+            echo "$hits" | sed -E 's/=.*/=<redacted>/'
+            exit 1
+          fi
+          echo "clean"
