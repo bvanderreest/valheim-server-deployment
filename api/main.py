@@ -12,6 +12,7 @@ from .routes.config import router as config_router
 from .routes.logs import router as logs_router
 from .routes.metrics import router as metrics_router
 from .routes.mods import router as mods_router
+from .routes.performance import router as performance_router
 from .routes.modifiers import router as modifiers_router
 from .routes.server import router as server_router
 from .routes.updates import router as updates_router
@@ -94,6 +95,7 @@ app.include_router(config_router, dependencies=[Depends(require_api_key)], depre
 app.include_router(mods_router, dependencies=[Depends(require_api_key)], deprecated=True)
 app.include_router(modifiers_router, dependencies=[Depends(require_api_key)], deprecated=True)
 app.include_router(updates_router, dependencies=[Depends(require_api_key)], deprecated=True)
+app.include_router(performance_router, dependencies=[Depends(require_api_key)], deprecated=True)
 
 # ── API versioning (#80) ──────────────────────────────────────────────────────
 # Everything is also mounted under /v1. The bare paths stay as permanent,
@@ -104,7 +106,8 @@ app.include_router(updates_router, dependencies=[Depends(require_api_key)], depr
 _V1 = "/v1"
 CONTRACT_VERSION = "1.0.0"   # CoreHost Game Server API
 
-for _r in (server_router, config_router, modifiers_router, mods_router, logs_router, updates_router):
+for _r in (server_router, config_router, modifiers_router, mods_router, logs_router, updates_router,
+           performance_router):
     app.include_router(_r, prefix=_V1, dependencies=[Depends(require_api_key)])
 app.include_router(metrics_router, prefix=_V1)
 

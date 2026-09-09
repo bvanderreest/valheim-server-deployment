@@ -180,6 +180,110 @@ p{margin:0}
 .hold.done .fillbar{clip-path:inset(0 0 0 0);transition:none}
 .hold-hint{font-size:12px;color:var(--ink-3);margin-top:8px}
 
+/* ---------- performance ---------- */
+/* Two categorical series, and only two: a save stall and a GC pause are
+   different things with different fixes, so they must never share a hue.
+   These are slots 1 and 2 of the validated categorical palette, stepped for
+   each surface and checked with the palette validator against THIS console's
+   surfaces (light #f8f9f6, dark #191d1a) — all six checks pass in both modes,
+   worst-pair CVD ΔE 24.7 light / 26.8 dark against a target of 8.
+   They are deliberately NOT the amber accent: accent means "the control you
+   press", and good/danger are reserved for state. A series hue that doubles as
+   a status colour makes a tall orange bar look like an alarm. */
+.perf{--s-save:#2a78d6;--s-gc:#eb6834}
+@media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .perf{--s-save:#3987e5;--s-gc:#d95926}}
+:root[data-theme="dark"] .perf{--s-save:#3987e5;--s-gc:#d95926}
+
+.verdict{border:1px solid var(--line);border-left:3px solid var(--ink-3);border-radius:12px;background:var(--surface);padding:16px 18px;margin-bottom:18px}
+.verdict[data-tone="good"]{border-left-color:var(--good);background:var(--good-soft)}
+.verdict[data-tone="warn"]{border-left-color:var(--accent-fill);background:var(--accent-soft)}
+.verdict[data-tone="none"]{border-left-color:var(--line-strong)}
+.verdict h2{font-size:15.5px;margin-bottom:5px;letter-spacing:-.005em}
+.verdict p{color:var(--ink-2);font-size:13.5px;max-width:66ch}
+.verdict p+p{margin-top:6px}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.tile{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:14px 16px;min-width:0}
+.tile .lbl{font-size:12.5px;color:var(--ink-2)}
+.tile .val{font-weight:600;font-size:23px;letter-spacing:-.015em;margin-top:2px;line-height:1.15;font-variant-numeric:normal}
+/* Proportional figures on the hero: tabular-nums gives every digit the width
+   of a 0, which at 44px makes a number like 661 look loose and gappy.
+   Tabular stays on the tiles and table columns, where digits must align. */
+.tile.hero .val{font-size:44px;letter-spacing:-.025em;line-height:1.05;margin-top:1px;font-variant-numeric:normal}
+.tile .sub{font-size:12px;color:var(--ink-3);margin-top:3px}
+.tile .val .unit{font-size:.5em;font-weight:500;color:var(--ink-2);margin-left:2px;letter-spacing:0}
+.tile.hero .val .unit{font-size:.32em}
+
+.perf-tools{display:flex;gap:8px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.perf-tools .grow{margin-left:auto}
+.chartcard{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:16px 18px 12px}
+.chartcard h2{font-size:15px}
+.chartcard h2 small{font-weight:400;color:var(--ink-3);margin-left:8px;font-size:12.5px}
+.chartwrap{position:relative;margin-top:10px}
+.chartwrap svg{display:block;width:100%;overflow:visible}
+.chartwrap .empty{padding:34px 4px;color:var(--ink-3);font-size:13px;text-align:center}
+.gridline{stroke:var(--line);stroke-width:1;shape-rendering:crispEdges}
+.axis{fill:var(--ink-3);font-size:11px;font-variant-numeric:tabular-nums}
+.axis-y{text-anchor:end}
+.axis-x{text-anchor:middle}
+.dlabel{fill:var(--ink-2);font-size:11px;font-weight:600;text-anchor:middle;font-variant-numeric:tabular-nums}
+/* The ring, not a border: a 4px stroke in the surface colour painted UNDER the
+   fill leaves 2px of surface around each bar, so two events seconds apart stay
+   countable instead of merging into one wide block. */
+.mark{stroke:var(--surface);stroke-width:4;paint-order:stroke fill}
+.mark.save{fill:var(--s-save)}
+.mark.gc{fill:var(--s-gc)}
+.hit{fill:transparent;cursor:default}
+.hit:focus-visible{outline:none}
+.hit:focus-visible+.markhi,.hitrow[data-hi] .markhi{opacity:1}
+.perf-legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-top:10px;flex-wrap:wrap;align-items:center}
+.perf-legend span{display:inline-flex;align-items:center;gap:7px}
+.perf-legend i{display:inline-block;width:14px;height:5px;border-radius:2.5px}
+.perf-legend i.save{background:var(--s-save)}
+.perf-legend i.gc{background:var(--s-gc)}
+
+.tip{position:absolute;pointer-events:none;opacity:0;transition:opacity 90ms ease;background:var(--ink);color:var(--bg);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.45;box-shadow:var(--shadow);z-index:5;max-width:250px}
+.tip[data-show]{opacity:1}
+.tip b{display:block;font-size:12.5px;margin-bottom:2px}
+.tip .t-k{display:inline-flex;align-items:center;gap:6px}
+.tip i{display:inline-block;width:10px;height:4px;border-radius:2px}
+.tip i.save{background:var(--s-save)}
+.tip i.gc{background:var(--s-gc)}
+@media (prefers-reduced-motion:reduce){.tip{transition:none}}
+
+.perftable{width:100%;border-collapse:collapse;font-size:13px;margin-top:4px}
+.perftable th{text-align:left;font-weight:500;color:var(--ink-2);font-size:12.5px;padding:7px 10px 7px 0;border-bottom:1px solid var(--line);white-space:nowrap}
+.perftable td{padding:7px 10px 7px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;vertical-align:top}
+.perftable td:first-child{white-space:nowrap}
+.perftable .k{display:inline-flex;align-items:center;gap:7px;font-variant-numeric:normal}
+.perftable .k i{display:inline-block;width:12px;height:5px;border-radius:2.5px;flex:none}
+.perftable .k i.save{background:var(--s-save)}
+.perftable .k i.gc{background:var(--s-gc)}
+.perftable .num{text-align:right}
+.perftable th.num{text-align:right}
+
+.askcard{border:1px solid var(--line);border-radius:12px;background:var(--surface);padding:16px 18px;margin-top:18px}
+.askcard h2{font-size:15px;margin-bottom:4px}
+.askcard p.lede{color:var(--ink-2);font-size:13.5px;max-width:64ch;margin-bottom:12px}
+.askrow{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.askrow .field{display:flex;flex-direction:column;gap:5px}
+.askrow label{font-size:12.5px;color:var(--ink-2)}
+.askrow input[type=time]{border:1px solid var(--line-strong);background:var(--bg);border-radius:8px;padding:8px 10px;font-variant-numeric:tabular-nums}
+.answer{margin-top:14px;border-radius:10px;padding:12px 14px;font-size:13.5px;border:1px solid var(--line);background:var(--bg)}
+.answer[hidden]{display:none}
+.answer[data-tone="server"]{border-color:var(--accent-line);background:var(--accent-soft)}
+.answer[data-tone="clear"]{border-color:var(--good);background:var(--good-soft)}
+.answer b{display:block;margin-bottom:3px}
+
+@media (max-width:900px){
+  .tiles{grid-template-columns:1fr 1fr}
+}
+@media (max-width:560px){
+  .tiles{grid-template-columns:1fr 1fr;gap:10px}
+  .tile.hero .val{font-size:36px}
+  .perftable{font-size:12.5px}
+}
+
 /* ---------- difficulty ---------- */
 .strata{display:grid;gap:26px}
 .stratum{display:grid;grid-template-columns:150px 1fr;gap:20px;padding-top:18px;border-top:1px solid var(--line)}
@@ -447,6 +551,7 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
   <div class="brand">Hugin <small>server console</small></div>
   <nav class="nav" aria-label="Views">
     <button data-nav="overview" aria-current="page">Overview</button>
+    <button data-nav="performance">Performance</button>
     <button data-nav="difficulty">Difficulty</button>
     <button data-nav="settings">Settings</button>
     <button data-nav="logs">Logs</button>
@@ -519,6 +624,12 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
           <div style="margin-top:10px"><button class="link" data-nav="difficulty">Open the difficulty editor</button></div>
         </div>
 
+        <div class="panel perf">
+          <h2>Freezes <small>last 6 h</small></h2>
+          <dl class="kv" id="o-perf"><dt>Reading the log…</dt><dd>—</dd></dl>
+          <div style="margin-top:10px"><button class="link" data-nav="performance">See when the world froze</button></div>
+        </div>
+
         <div class="update">
           <h2 id="upd-title">Checking for a server update…</h2>
           <div id="upd-detail" class="lede"></div>
@@ -533,6 +644,78 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
           <label class="ack"><input type="checkbox" id="upd-ack"><span>I know the server will stay stopped until I start it, and I've told the others.</span></label>
           <button class="btn danger hold" id="upd-btn" disabled><span class="fillbar"></span><span class="txt">Hold to stop and update</span></button>
           <p class="hold-hint">Press and hold for two seconds. Let go early to cancel.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- PERFORMANCE ---------- -->
+    <section class="view perf" data-view="performance">
+      <div class="view-head"><div><h1>Performance</h1><p>Every time the world froze, and for how long — read from the server's own log. This is how you tell a server problem from a player's connection.</p></div></div>
+
+      <div class="verdict" id="p-verdict" data-tone="none" role="status" aria-live="polite">
+        <h2>Reading the log…</h2>
+        <p class="muted">Working out how often the world froze.</p>
+      </div>
+
+      <div class="tiles">
+        <div class="tile hero"><div class="lbl">Worst freeze</div><div class="val num" id="p-worst">—</div><div class="sub" id="p-worst-sub">&nbsp;</div></div>
+        <div class="tile"><div class="lbl">Freezes per hour</div><div class="val num" id="p-rate">—</div><div class="sub" id="p-rate-sub">&nbsp;</div></div>
+        <div class="tile"><div class="lbl">Time frozen</div><div class="val num" id="p-frozen">—</div><div class="sub" id="p-frozen-sub">&nbsp;</div></div>
+        <div class="tile"><div class="lbl">Log covers</div><div class="val num" id="p-covers">—</div><div class="sub" id="p-covers-sub">&nbsp;</div></div>
+      </div>
+
+      <div class="perf-tools">
+        <div class="seg" role="group" aria-label="Time range">
+          <button data-perf-range="1" aria-pressed="false">1 h</button>
+          <button data-perf-range="6" aria-pressed="true">6 h</button>
+          <button data-perf-range="24" aria-pressed="false">24 h</button>
+        </div>
+        <div class="seg grow" role="group" aria-label="View">
+          <button data-perf-mode="chart" aria-pressed="true">Chart</button>
+          <button data-perf-mode="table" aria-pressed="false">Table</button>
+        </div>
+        <button class="btn sm" id="p-refresh">Refresh</button>
+      </div>
+
+      <div class="chartcard">
+        <h2 id="p-chart-title">Freezes over time <small id="p-chart-sub">height is how long the main thread was blocked</small></h2>
+        <div class="chartwrap" id="p-chartwrap" data-perf-panel="chart">
+          <div class="empty" id="p-empty" hidden></div>
+          <svg id="p-chart" role="img" aria-labelledby="p-chart-title" aria-describedby="p-chart-desc"></svg>
+          <p class="sr" id="p-chart-desc"></p>
+          <div class="tip" id="p-tip" role="presentation"></div>
+        </div>
+        <div data-perf-panel="table" hidden>
+          <table class="perftable">
+            <caption class="sr">Every freeze in the selected window</caption>
+            <thead><tr><th scope="col">Time</th><th scope="col">Kind</th><th scope="col" class="num">Froze for</th><th scope="col">Detail</th></tr></thead>
+            <tbody id="p-tbody"></tbody>
+          </table>
+        </div>
+        <div class="perf-legend">
+          <span><i class="save"></i> Save stall <span class="faint">— scheduled, tunable</span></span>
+          <span><i class="gc"></i> GC pause <span class="faint">— roughly hourly, not tunable</span></span>
+        </div>
+      </div>
+
+      <div class="askcard">
+        <h2>“I lagged at…” — was that the server?</h2>
+        <p class="lede">Put in the time someone reported. If nothing froze then, the freeze was not here — and with players spread across continents that is usually the answer.</p>
+        <div class="askrow">
+          <div class="field"><label for="p-ask">Time they reported <span class="faint" id="p-ask-tz"></span></label><input type="time" id="p-ask" step="60"></div>
+          <button class="btn" id="p-ask-go">Check</button>
+        </div>
+        <div class="answer" id="p-answer" role="status" aria-live="polite" hidden></div>
+      </div>
+
+      <div class="grid2" style="margin-top:18px">
+        <div class="panel">
+          <h2>What drives each one</h2>
+          <dl class="kv" id="p-context"></dl>
+        </div>
+        <div class="panel">
+          <h2>What you can change</h2>
+          <div class="muted" style="font-size:13.5px;line-height:1.6" id="p-levers"></div>
         </div>
       </div>
     </section>
@@ -676,7 +859,7 @@ const NUM_DEFAULT = 100, NUM_RANGE = [0, 1000];
 /* ===================== MOCK SERVER ===================== */
 const now = () => Date.now();
 const S = {
-  running:true, pid:48213, startedAt: now() - 12*60*1000, version:'l-0.221.12', joinCode:'366974',
+  running:true, pid:48213, startedAt: now() - 9*3600*1000, version:'l-0.221.12', joinCode:'366974',
   lastSave: now() - 4*60*1000, players:[],
   config:{ SERVER_NAME:'Lowood-AU', WORLD_NAME:'CrowsNest', PASSWORD:'valhalla-gate', PORT:2456, PUBLIC:true, CROSSPLAY:true, MAX_PLAYERS:10, SAVE_INTERVAL:1800, BACKUPS_KEEP:6 },
   // MUST mirror the real /status extras exactly. When this drifted — emitting
@@ -775,12 +958,79 @@ const realApi = {
 };
 
 
+
+// ── Mock /performance ─────────────────────────────────────────────────────────
+// This MUST mirror the real response field for field. The last time a mock
+// drifted from the contract (world_size_mb vs world_bytes) every mock-backed
+// check passed while the live console rendered "undefined MB". Shape first,
+// plausible numbers second.
+const _rnd = seed => { const x = Math.sin(seed * 12.9898) * 43758.5453; return x - Math.floor(x); };
+function _pct(sorted, q){
+  if (!sorted.length) return null;
+  return sorted[Math.max(0, Math.min(sorted.length - 1, Math.round(q * (sorted.length - 1))))];
+}
+function _summarise(events, kind, spanHours){
+  const vals = events.filter(e => e.kind === kind).map(e => e.ms).sort((a, b) => a - b);
+  const picked = events.filter(e => e.kind === kind);
+  return {
+    count: vals.length,
+    per_hour: spanHours > 0 ? Math.round(vals.length / spanHours * 100) / 100 : null,
+    p50_ms: _pct(vals, 0.5), p95_ms: _pct(vals, 0.95),
+    max_ms: vals.length ? vals[vals.length - 1] : null,
+    total_ms: Math.round(vals.reduce((a, b) => a + b, 0) * 10) / 10,
+    last_epoch: picked.length ? picked[picked.length - 1].epoch : null,
+  };
+}
+function perfDoc(hours){
+  const t1 = Math.floor(now() / 1000);
+  // A restart rotates the log, so coverage starts at the later of "the window
+  // asked for" and "when this process started".
+  const from = Math.max(t1 - hours * 3600, Math.floor(S.startedAt / 1000));
+  const to = Math.max(from, t1 - 25);
+  const events = [];
+  if (S.running){
+    const iv = Number(S.config.SAVE_INTERVAL) || 1800;
+    for (let t = Math.ceil(from / iv) * iv; t <= to; t += iv){
+      events.push({ kind:'save', epoch:t, ms: 470 + Math.round(_rnd(t) * 240), exact:true,
+                    total_ms: Math.round((3200 + _rnd(t + 7) * 1900) * 10) / 10, objects:null });
+    }
+    for (let t = Math.ceil(from / 3600) * 3600 + 780; t <= to; t += 3600){
+      events.push({ kind:'gc', epoch:t, ms: Math.round((180 + _rnd(t + 3) * 500) * 1000) / 1000, exact:false,
+                    total_ms:null, objects: 204000 + Math.round(_rnd(t + 11) * 6000) });
+    }
+    events.sort((a, b) => a.epoch - b.epoch);
+  }
+  const span = (to - from) / 3600;
+  const save = _summarise(events, 'save', span), gc = _summarise(events, 'gc', span);
+  const blocked = Math.round((save.total_ms + gc.total_ms) * 10) / 10;
+  return {
+    generated_at: t1, window_hours: hours, log_file: '/srv/valheim/logs/valheim-server.log',
+    log_covers_from: events.length || S.running ? from : null,
+    log_covers_to: events.length || S.running ? to : null,
+    observed_hours: Math.round(span * 1000) / 1000,
+    truncated: false, events, save, gc,
+    blocked_ms: blocked,
+    blocked_ms_per_hour: span > 0 ? Math.round(blocked / span * 10) / 10 : null,
+    blocked_pct: span > 0 ? Math.round(100 * blocked / (span * 3600000) * 10000) / 10000 : null,
+    save_interval_s: Number(S.config.SAVE_INTERVAL) || 1800,
+    context: { world_zdos: S.extras.world_objects, loaded_objects: 206963,
+               players: S.players.length, net_sent_bytes: 154238, net_recv_bytes: 98211 },
+  };
+}
+
 const mockApi = {
   async health(){ await sleep(90); return { status:'ok', server_type:'valheim', server_label:S.config.SERVER_NAME }; },
   async get(path, key){
     await sleep(120 + Math.random()*140);
     if (!key || key.length < 12) return { status:401, body:{ detail:'Invalid or missing X-API-Key' } };
+    const q = path.split('?')[1] || '';
+    path = path.split('?')[0];
     if (path === '/status') return { status:200, body:statusDoc() };
+    if (path === '/performance'){
+      const h = Number(new URLSearchParams(q).get('hours') || 6);
+      if (!(h >= 0.25 && h <= 48)) return { status:422, body:{ detail:'hours must be between 0.25 and 48' } };
+      return { status:200, body:perfDoc(h) };
+    }
     if (path === '/config') return { status:200, body:{ config:{ ...S.config }, editable_keys:Object.keys(S.config) } };
     if (path === '/modifiers') return { status:200, body:{ ...structuredClone(S.mod), restart_required:true, options:{ presets:PRESETS, preset_baseline:PRESET_BASELINE, modifiers:MODIFIERS, toggles:TOGGLE_GROUPS.flatMap(g=>g.keys), numeric:NUMERIC, numeric_default:NUM_DEFAULT, numeric_range:NUM_RANGE, irreversible_toggles:IRREVERSIBLE } } };
     if (path === '/mods') return { status:200, body:{ mods:S.mods.map(m=>({...m})) } };
@@ -907,6 +1157,9 @@ function nav(v){
   $$('.nav [data-nav]').forEach(b => { if (b.dataset.nav === v) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current'); });
   $('#readout').toggleAttribute('data-show', v === 'difficulty');
   if (v === 'logs') scrollLog();
+  // A hidden section has clientWidth 0, so a chart drawn while this view was
+  // display:none came out at the 300px floor. Redraw on entry, every time.
+  if (v === 'performance'){ if (!PERF.loaded) loadPerf(); else if (PERF.mode === 'chart') drawTimeline(); }
   window.scrollTo({ top:0 });
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-nav]'); if (b) nav(b.dataset.nav); });
@@ -1100,6 +1353,385 @@ function renderOverview(){
   $('#o-rules').innerHTML = parts.join('<br>');
 }
 const kv = rows => rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+
+/* ===================== PERFORMANCE =====================
+   /metrics reports the LAST stall. That is a snapshot, and a snapshot cannot
+   settle the argument a group split across continents always has: "I lagged at
+   20:42 — was that you or me?" /performance returns the history with
+   timestamps, and this view is where it gets answered.
+
+   Two event kinds, deliberately never merged into one "lag" number:
+     save  the blocking half of an autosave. Scheduled, and tunable via
+           SAVE_INTERVAL — so it has an action attached.
+     gc    Unity's UnloadUnusedAssets. Roughly hourly, scales with loaded
+           objects, and NOT tunable server-side — so it has none.
+   A single blended figure would hide which of those you are looking at, and
+   therefore whether anything can be done about it. */
+const PERF = { hours: 6, mode: 'chart', data: null, loading: false, loaded: false };
+const TZ = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone; } catch { return 'local time'; } })();
+const _tHM  = new Intl.DateTimeFormat(undefined, { hour:'2-digit', minute:'2-digit', hour12:false });
+const _tHMS = new Intl.DateTimeFormat(undefined, { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+const hm  = e => _tHM.format(new Date(e * 1000));
+const hms = e => _tHMS.format(new Date(e * 1000));
+const trimZeros = s => s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+function fmtMs(ms){
+  if (ms === null || ms === undefined) return '—';
+  if (ms < 1000) return Math.round(ms) + ' ms';
+  return trimZeros((ms / 1000).toFixed(ms >= 10000 ? 1 : 2)) + ' s';
+}
+function fmtDur(h){
+  if (!h) return '—';
+  // Round to whole minutes FIRST. Rounding the remainder separately produced
+  // "5 h 60 min" for 5.9997 hours.
+  const mins = Math.round(h * 60);
+  if (mins < 60) return mins + ' min';
+  const wh = Math.floor(mins / 60), m = mins % 60;
+  return m ? `${wh} h ${m} min` : `${wh} h`;
+}
+// `lower` is carried, not computed: toLowerCase() on 'GC pause' gives
+// 'gc pause', and an initialism is not a word you may lowercase.
+const KIND = { save:{ label:'Save stall', lower:'save stall', cls:'save' },
+               gc:{ label:'GC pause', lower:'GC pause', cls:'gc' } };
+
+async function loadPerf(){
+  if (PERF.loading) return;
+  PERF.loading = true;
+  const r = await api.get('/performance?hours=' + PERF.hours, KEY);
+  PERF.loading = false;
+  if (r.status !== 200){
+    // Say which failure this is. "No data" and "we could not ask" look the
+    // same on a chart and mean opposite things.
+    PERF.data = null;
+    setVerdict('none', r.status === 0 ? 'Could not reach the server.'
+                                      : `The API answered ${r.status}.`,
+      ['Nothing below is current. The figures are not zero — they are unknown.']);
+    $('#p-empty').hidden = false;
+    $('#p-empty').textContent = 'No data — the server did not answer.';
+    $('#p-chart').innerHTML = '';
+    return;
+  }
+  PERF.data = r.body; PERF.loaded = true;
+  renderPerf();
+}
+
+function setVerdict(tone, head, paras){
+  const el = $('#p-verdict');
+  el.dataset.tone = tone;
+  el.innerHTML = `<h2>${esc(head)}</h2>` + paras.map(t => `<p>${t}</p>`).join('');
+}
+
+/* The verdict is the BLUF: what this means, before any number. It must be able
+   to say "nothing wrong" — a panel that can only ever report a problem is a
+   noise floor, not a report. */
+function renderVerdict(d){
+  const total = d.save.count + d.gc.count;
+  const obs = d.observed_hours;
+  if (!obs || !total){
+    setVerdict('none', 'Not enough log to say yet.',
+      [`The current log covers ${obs ? fmtDur(obs) : 'almost nothing'}. A restart rotates the log, so this fills in as the server runs.`,
+       `Nothing here is a claim that the server is fine — it is a claim that we have not watched it long enough to know.`]);
+    return;
+  }
+  const worst = Math.max(d.save.max_ms || 0, d.gc.max_ms || 0);
+  const perHour = (d.save.per_hour || 0) + (d.gc.per_hour || 0);
+  const frozen = `${fmtMs(d.blocked_ms)} of frozen time in total, ${d.blocked_pct}% of the window`;
+
+  if (d.save.per_hour >= 6 && d.save.max_ms >= 300){
+    setVerdict('warn', `The world freezes ${Math.round(d.save.per_hour)} times an hour to save.`,
+      [`Each autosave blocks the main thread for about ${fmtMs(d.save.p50_ms)}, and it happens every ${Math.round((d.save_interval_s||0)/60)} minutes. Everyone online feels it at the same instant, which is what makes it read as "the server is laggy" rather than as one person's connection.`,
+       `<b>Lever:</b> raise <span class="mono">SAVE_INTERVAL</span> in the server's <span class="mono">.env</span>. It trades save frequency for freeze frequency — the cost is how much play you lose in a crash.`]);
+    return;
+  }
+  if (worst >= 2000){
+    const which = (d.gc.max_ms || 0) >= (d.save.max_ms || 0) ? 'gc' : 'save';
+    setVerdict('warn', `Freezes are reaching ${fmtMs(worst)} — long enough to be obvious.`,
+      which === 'gc'
+        ? [`The longest was a GC pause. It scales with loaded objects (${num(d.context.loaded_objects)} right now), and Valheim keeps a zone loaded for every player — so the more spread out the group, the longer it runs.`,
+           `<b>No server-side lever.</b> No launch flag exposes Unity's unload cycle. What moves it is fewer loaded zones: players closer together, and fewer built structures across the map.`]
+        : [`The longest was a save stall. ${frozen}.`,
+           `<b>Lever:</b> <span class="mono">SAVE_INTERVAL</span> controls how often this happens, not how long it takes. Length is driven by the world's ${num(d.context.world_zdos)} objects.`]);
+    return;
+  }
+  setVerdict('good', 'Nothing here explains lag.',
+    [`${total} freeze${total === 1 ? '' : 's'} in the ${fmtDur(obs)} on record${perHour ? `, about ${trimZeros(perHour.toFixed(1))} an hour` : ''}: ${frozen}. The longest was ${fmtMs(worst)}.`,
+     `So if someone reports lag and nothing below lines up with it, <b>the freeze was not on this server</b>. Check the time they gave you in the box underneath.`]);
+}
+
+function renderPerf(){
+  const d = PERF.data; if (!d) return;
+  renderVerdict(d);
+
+  const worstEv = d.events.reduce((a, e) => (a === null || e.ms > a.ms) ? e : a, null);
+  const worst = worstEv ? worstEv.ms : null;
+  setTile('#p-worst', worst === null ? '—' : (worst < 1000 ? Math.round(worst) : trimZeros((worst/1000).toFixed(2))),
+          worst === null ? '' : (worst < 1000 ? 'ms' : 's'),
+          worstEv === null ? 'No freeze recorded yet'
+            : `${KIND[worstEv.kind].label}, ${worstEv.exact ? '' : 'about '}${hm(worstEv.epoch)}`);
+
+  const perHour = (d.save.per_hour === null && d.gc.per_hour === null)
+    ? null : (d.save.per_hour || 0) + (d.gc.per_hour || 0);
+  setTile('#p-rate', perHour === null ? '—' : trimZeros(perHour.toFixed(1)), '',
+          perHour === null ? 'Not enough log' : `${trimZeros((d.save.per_hour||0).toFixed(1))} save · ${trimZeros((d.gc.per_hour||0).toFixed(1))} GC`);
+
+  setTile('#p-frozen', d.blocked_pct === null ? '—' : trimZeros(d.blocked_pct.toFixed(3)),
+          d.blocked_pct === null ? '' : '%',
+          d.blocked_pct === null ? 'Not enough log' : `${fmtMs(d.blocked_ms)} out of ${fmtDur(d.observed_hours)}`);
+
+  setTile('#p-covers', d.observed_hours ? fmtDur(d.observed_hours) : '—', '',
+          d.log_covers_from ? `since ${hm(d.log_covers_from)}${d.observed_hours < d.window_hours - 0.05 ? ' — log rotated at the last restart' : ''}` : 'log is empty');
+
+  drawTimeline();
+  renderPerfTable();
+  renderPerfContext();
+  renderPerfTease();
+  $('#p-ask-tz').textContent = `(${TZ})`;
+}
+function setTile(sel, val, unit, sub){
+  $(sel).innerHTML = esc(String(val)) + (unit ? `<span class="unit">${esc(unit)}</span>` : '');
+  $(sel + '-sub').innerHTML = sub ? esc(sub) : '&nbsp;';
+}
+
+/* ---- the timeline ---- */
+function niceMax(v){
+  const steps = [100,150,200,250,300,400,500,600,750,1000,1500,2000,3000,4000,5000,7500,10000];
+  for (const s of steps) if (v <= s) return s;
+  return Math.ceil(v / 5000) * 5000;
+}
+function drawTimeline(){
+  const d = PERF.data, svg = $('#p-chart'), empty = $('#p-empty');
+  if (!d) return;
+  const wrap = $('#p-chartwrap');
+  const W = Math.max(300, wrap.clientWidth || 640);
+  const H = 210, padL = 46, padR = 14, padT = 22, padB = 30;
+  const x0 = padL, x1 = W - padR, y0 = H - padB, y1 = padT;
+
+  const t1 = d.generated_at, t0 = t1 - d.window_hours * 3600;
+  const X = t => x0 + (x1 - x0) * Math.min(1, Math.max(0, (t - t0) / (t1 - t0)));
+  const maxMs = Math.max(d.save.max_ms || 0, d.gc.max_ms || 0);
+  const yMax = niceMax(maxMs || 100);
+  const Y = ms => y0 - (y0 - y1) * Math.min(1, ms / yMax);
+
+  empty.hidden = d.events.length > 0;
+  if (!d.events.length){
+    empty.textContent = d.observed_hours
+      ? `No freeze in the last ${fmtDur(d.observed_hours)}. That is the good outcome, not a missing chart.`
+      : 'The log has not been running long enough to show anything yet.';
+  }
+
+  const p = [];
+  // The part of the window with no log behind it. Drawing bars over it without
+  // saying so would read as "quiet here" when the truth is "we were not looking".
+  if (d.log_covers_from && d.log_covers_from > t0 + 60){
+    const xc = X(d.log_covers_from);
+    p.push(`<rect x="${x0}" y="${y1}" width="${(xc - x0).toFixed(1)}" height="${y0 - y1}" fill="var(--inset)" opacity=".7"></rect>`);
+    if (xc - x0 > 74) p.push(`<text class="axis" x="${(x0 + (xc - x0) / 2).toFixed(1)}" y="${y1 + 14}" text-anchor="middle">no log</text>`);
+  }
+  // Gridlines: hairline, recessive, and they carry the values the direct
+  // labels don't.
+  for (let i = 0; i <= 2; i++){
+    const v = yMax * i / 2, y = Y(v);
+    p.push(`<line class="gridline" x1="${x0}" y1="${y.toFixed(1)}" x2="${x1}" y2="${y.toFixed(1)}"></line>`);
+    p.push(`<text class="axis axis-y" x="${x0 - 8}" y="${(y + 3.5).toFixed(1)}">${v >= 1000 ? trimZeros((v/1000).toFixed(1)) + 's' : v + 'ms'}</text>`);
+  }
+  const ticks = W < 480 ? 3 : 5;
+  for (let i = 0; i < ticks; i++){
+    const t = t0 + (t1 - t0) * i / (ticks - 1);
+    const anchor = i === 0 ? 'start' : i === ticks - 1 ? 'end' : 'middle';
+    p.push(`<text class="axis" text-anchor="${anchor}" x="${X(t).toFixed(1)}" y="${y0 + 17}">${esc(hm(t))}</text>`);
+  }
+  p.push(`<text class="axis" text-anchor="end" x="${x1}" y="${y0 + 28}">${esc(TZ)}</text>`);
+
+  // Marks. A column per event: magnitude from a shared baseline, 4px rounded
+  // data-end, square where it meets zero.
+  const BW = 6, R = 3;
+  const maxOf = k => d.events.filter(e => e.kind === k).reduce((a, e) => e.ms > (a?.ms ?? -1) ? e : a, null);
+  const peaks = [maxOf('save'), maxOf('gc')].filter(Boolean);
+  d.events.forEach((e, i) => {
+    const cx = X(e.epoch), yt = Y(e.ms), h = Math.max(2, y0 - yt), r = Math.min(R, h / 2);
+    const l = cx - BW / 2, rr = cx + BW / 2;
+    const dPath = `M${l.toFixed(1)} ${y0} L${l.toFixed(1)} ${(yt + r).toFixed(1)} Q${l.toFixed(1)} ${yt.toFixed(1)} ${(l + r).toFixed(1)} ${yt.toFixed(1)} L${(rr - r).toFixed(1)} ${yt.toFixed(1)} Q${rr.toFixed(1)} ${yt.toFixed(1)} ${rr.toFixed(1)} ${(yt + r).toFixed(1)} L${rr.toFixed(1)} ${y0} Z`;
+    p.push(`<path class="mark ${KIND[e.kind].cls}" d="${dPath}"></path>`);
+  });
+  // Direct labels, one per series — the peak only. A number on every column is
+  // chaos and goes unread; the axis and the tooltip carry the rest.
+  peaks.forEach(e => {
+    const cx = X(e.epoch), yt = Y(e.ms), txt = fmtMs(e.ms);
+    // Measure before placing. At 320px the columns are ~14px apart, and a
+    // label wide enough to read sat straight on top of its neighbours. A label
+    // that overlaps the data is worse than no label — the axis, the tooltip
+    // and the table view all still carry the number.
+    const halfW = txt.length * 3.5 + 3;
+    const clash = d.events.some(o => o !== e
+      && Math.abs(X(o.epoch) - cx) < halfW + BW / 2 + 3
+      && Y(o.ms) < yt - 3);
+    if (clash) return;
+    const anchor = cx - halfW < x0 ? 'start' : cx + halfW > x1 ? 'end' : 'middle';
+    const tx = anchor === 'start' ? cx - BW / 2 : anchor === 'end' ? cx + BW / 2 : cx;
+    p.push(`<text class="dlabel" text-anchor="${anchor}" x="${tx.toFixed(1)}" y="${(yt - 7).toFixed(1)}">${esc(txt)}</text>`);
+  });
+  // Hit targets last, and far wider than the 6px mark — a column you cannot
+  // point at has no tooltip.
+  d.events.forEach((e, i) => {
+    const cx = X(e.epoch);
+    p.push(`<rect class="hit" data-ev="${i}" x="${(cx - 13).toFixed(1)}" y="${y1}" width="26" height="${y0 - y1 + 6}"></rect>`);
+  });
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('height', H);
+  svg.innerHTML = p.join('');
+
+  $('#p-chart-desc').textContent = d.events.length
+    ? `${d.events.length} freezes in the last ${fmtDur(d.observed_hours)}: ${d.save.count} save stalls up to ${fmtMs(d.save.max_ms)}, ${d.gc.count} GC pauses up to ${fmtMs(d.gc.max_ms)}. The table view lists every one.`
+    : 'No freezes recorded in this window.';
+}
+
+/* ---- tooltip ---- */
+(() => {
+  const tip = () => $('#p-tip');
+  function show(i, ev){
+    const d = PERF.data; if (!d || !d.events[i]) return;
+    const e = d.events[i], t = tip(), wrap = $('#p-chartwrap');
+    const detail = e.kind === 'save'
+      ? (e.total_ms ? `Whole save took ${fmtMs(e.total_ms)} — the rest was background I/O, not a freeze.` : 'Blocking part of an autosave.')
+      : `Scanned ${num(e.objects)} loaded objects.` + (e.exact ? '' : ' Time is approximate — Unity logs this line without one.');
+    t.innerHTML = `<b><span class="t-k"><i class="${KIND[e.kind].cls}"></i>${esc(KIND[e.kind].label)} · ${esc(fmtMs(e.ms))}</span></b>`
+      + `${e.exact ? '' : 'about '}${esc(hms(e.epoch))}<br>${detail}`;
+    t.setAttribute('data-show', '');
+    const r = wrap.getBoundingClientRect(), tr = t.getBoundingClientRect();
+    let left = ev.clientX - r.left + 12;
+    if (left + tr.width > r.width) left = ev.clientX - r.left - tr.width - 12;
+    t.style.left = Math.max(0, left) + 'px';
+    t.style.top = Math.max(0, ev.clientY - r.top - tr.height - 10) + 'px';
+  }
+  function hide(){ tip().removeAttribute('data-show'); }
+  document.addEventListener('pointermove', e => {
+    const h = e.target.closest?.('#p-chart .hit');
+    if (h) show(Number(h.dataset.ev), e); else if (e.target.closest?.('#p-chartwrap')) hide();
+  });
+  document.addEventListener('pointerleave', e => { if (e.target.id === 'p-chartwrap') hide(); }, true);
+  window.addEventListener('scroll', hide, { passive: true });
+})();
+
+/* ---- table view: the same data, ungated by colour or pointer ---- */
+function renderPerfTable(){
+  const d = PERF.data, tb = $('#p-tbody');
+  if (!d.events.length){ tb.innerHTML = `<tr><td colspan="4" class="faint">Nothing froze in this window.</td></tr>`; return; }
+  tb.innerHTML = d.events.slice().reverse().map(e => {
+    const detail = e.kind === 'save'
+      ? (e.total_ms ? `whole save ${fmtMs(e.total_ms)}, mostly background I/O` : 'autosave')
+      : `${num(e.objects)} objects scanned${e.exact ? '' : ' · time approximate'}`;
+    return `<tr><td>${e.exact ? '' : '≈'}${esc(hms(e.epoch))}</td>`
+      + `<td><span class="k"><i class="${KIND[e.kind].cls}"></i>${esc(KIND[e.kind].label)}</span></td>`
+      + `<td class="num">${esc(fmtMs(e.ms))}</td><td class="muted">${esc(detail)}</td></tr>`;
+  }).join('');
+}
+
+function renderPerfContext(){
+  const d = PERF.data, c = d.context;
+  $('#p-context').innerHTML = kv([
+    ['World objects (ZDOs)', num(c.world_zdos)],
+    ['Loaded objects', num(c.loaded_objects)],
+    ['Autosave every', d.save_interval_s ? `${Math.round(d.save_interval_s/60)} min` : '—'],
+    ['Typical save stall', fmtMs(d.save.p50_ms)],
+    ['Worst save stall', fmtMs(d.save.max_ms)],
+    ['Typical GC pause', fmtMs(d.gc.p50_ms)],
+    ['Worst GC pause', fmtMs(d.gc.max_ms)],
+    ['Players at last sample', c.players === null ? '—' : String(c.players)],
+  ]);
+  $('#p-levers').innerHTML =
+    `<b>Save stall</b> — how OFTEN is <span class="mono">SAVE_INTERVAL</span>`
+    + (d.save_interval_s ? ` (now ${Math.round(d.save_interval_s/60)} min)` : '')
+    + `. How LONG is the world's ${num(c.world_zdos)} objects, and that only shrinks by demolishing things.<br><br>`
+    + `<b>GC pause</b> — no server-side lever exists. It scales with loaded objects (${num(c.loaded_objects)}), and Valheim keeps a zone loaded per player, so a group spread across the map loads more than the same group standing together.<br><br>`
+    + `<b>Neither is network.</b> If a freeze is here, everyone online hits it at the same second. If only one person lagged, this panel will show nothing at that time — and that is the finding, not a gap.`;
+}
+
+/* ---- "was it the server?" ---- */
+function askPerf(){
+  const d = PERF.data, out = $('#p-answer');
+  if (!d) return;
+  const v = $('#p-ask').value;
+  if (!v){ out.hidden = true; return; }
+  const [hh, mm] = v.split(':').map(Number);
+  const nowD = new Date(d.generated_at * 1000);
+  const t = new Date(nowD); t.setHours(hh, mm, 0, 0);
+  if (t.getTime() > nowD.getTime()) t.setDate(t.getDate() - 1);
+  const target = t.getTime() / 1000;
+  const WIN = 120; // nobody reports a lag spike to the second
+
+  out.hidden = false;
+  // Three outcomes, and the third is the one a naive version gets wrong: with
+  // no log covering that minute, "nothing froze" is not an answer, it is a
+  // guess dressed as one.
+  if (!d.log_covers_from || target < d.log_covers_from - WIN || target > (d.log_covers_to || 0) + WIN){
+    out.dataset.tone = '';
+    out.innerHTML = `<b>Can't say — the log doesn't reach that far back.</b>`
+      + `It covers ${esc(hm(d.log_covers_from || d.generated_at))} to ${esc(hm(d.log_covers_to || d.generated_at))} ${esc(TZ)}. `
+      + `A restart rotates the log, so anything before the last restart is gone from this view.`;
+    return;
+  }
+  const hits = d.events.filter(e => Math.abs(e.epoch - target) <= WIN).sort((a, b) => b.ms - a.ms);
+  if (!hits.length){
+    out.dataset.tone = 'clear';
+    out.innerHTML = `<b>Not the server.</b> Nothing froze within two minutes of ${esc(hm(target))}. `
+      + `The main thread was running normally, so whatever they felt happened between them and here — their connection, the relay, or their own machine.`;
+    return;
+  }
+  const e = hits[0];
+  out.dataset.tone = 'server';
+  out.innerHTML = `<b>Yes — that was the server.</b> A ${esc(KIND[e.kind].lower)} of ${esc(fmtMs(e.ms))} at ${e.exact ? '' : 'about '}${esc(hms(e.epoch))}`
+    + (hits.length > 1 ? `, and ${hits.length - 1} more within two minutes` : '') + '. '
+    + (e.kind === 'save'
+        ? `Everyone online froze together for that long. <span class="mono">SAVE_INTERVAL</span> changes how often it happens.`
+        : `That is Unity's periodic unload. There is no server-side setting for it — it shortens when fewer zones are loaded.`);
+}
+
+/* ---- wiring ---- */
+document.addEventListener('click', e => {
+  const rb = e.target.closest('[data-perf-range]');
+  if (rb){
+    PERF.hours = Number(rb.dataset.perfRange);
+    $$('[data-perf-range]').forEach(b => b.setAttribute('aria-pressed', String(b === rb)));
+    $('#p-answer').hidden = true;
+    loadPerf();
+    return;
+  }
+  const mb = e.target.closest('[data-perf-mode]');
+  if (mb){
+    PERF.mode = mb.dataset.perfMode;
+    $$('[data-perf-mode]').forEach(b => b.setAttribute('aria-pressed', String(b === mb)));
+    $$('[data-perf-panel]').forEach(pn => pn.hidden = pn.dataset.perfPanel !== PERF.mode);
+    // The subtitle explains the CHART's encoding; leaving "height is how long"
+    // above a table describes something that is not on screen.
+    $('#p-chart-sub').textContent = PERF.mode === 'chart'
+      ? 'height is how long the main thread was blocked'
+      : 'newest first';
+    if (PERF.mode === 'chart') drawTimeline();
+    return;
+  }
+  if (e.target.id === 'p-refresh'){ loadPerf(); return; }
+  if (e.target.id === 'p-ask-go'){ askPerf(); return; }
+});
+$('#p-ask').addEventListener('keydown', e => { if (e.key === 'Enter'){ e.preventDefault(); askPerf(); } });
+let _perfResizeT = null;
+window.addEventListener('resize', () => {
+  if (PERF.mode !== 'chart' || !PERF.data) return;
+  clearTimeout(_perfResizeT); _perfResizeT = setTimeout(drawTimeline, 120);
+});
+
+/* Overview teaser — the same numbers, so the two can never disagree. */
+function renderPerfTease(){
+  const d = PERF.data, el = $('#o-perf');
+  if (!el) return;
+  if (!d){ el.innerHTML = kv([['Freezes', '—']]); return; }
+  const total = d.save.count + d.gc.count;
+  el.innerHTML = kv([
+    ['Freezes on record', String(total)],
+    ['Worst', fmtMs(Math.max(d.save.max_ms || 0, d.gc.max_ms || 0) || null)],
+    ['Time frozen', d.blocked_pct === null ? '—' : `${trimZeros(d.blocked_pct.toFixed(3))}%`],
+    ['Log covers', d.observed_hours ? fmtDur(d.observed_hours) : '—'],
+  ]);
+}
 
 /* ===================== DIFFICULTY ===================== */
 let server = null, draft = null;
@@ -1355,7 +1987,7 @@ function toast(msg, ms=4000){ const t = document.createElement('div'); t.classNa
 async function startApp(firstStatus){
   loadUpdates();  // build check runs once on entry, then on demand
   status = firstStatus; renderStatus();
-  await Promise.all([loadModifiers(), loadConfig(), loadLogs(), loadMods()]);
+  await Promise.all([loadModifiers(), loadConfig(), loadLogs(), loadMods(), loadPerf()]);
   poll();
 }
 boot();
