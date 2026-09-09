@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     # derive from anything else.
     savedir: Path = Path("/srv/valheim/worlds")
     backup_dir: Path = Path("/srv/valheim/backups")
+    # Where SteamCMD installed the server. Needed to read the build id from
+    # steamapps/appmanifest_896660.acf and answer "is an update waiting?".
+    # deploy() writes SERVER_DIR into .env; this default matches its layout.
+    server_dir: Path = Path(__file__).resolve().parents[1] / "server"
 
     # logfile is computed from log_dir unless explicitly overridden via LOGFILE_OVERRIDE
     logfile_override: Optional[Path] = None

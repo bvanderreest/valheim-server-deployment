@@ -210,6 +210,7 @@ p{margin:0}
 .stop.base{color:var(--ink-2)}
 .stop.base[aria-checked="true"] .pip::before{background:var(--accent-fill);border-color:var(--ink)}
 @media (hover:hover) and (pointer:fine){.stop:hover .pip::before{transform:scale(1.25)}}
+.update[data-attention]{border-color:var(--accent-line);background:var(--accent-soft)}
 .legend{display:flex;gap:16px;font-size:12px;color:var(--ink-2);margin-top:4px;flex-wrap:wrap}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .legend i{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px solid var(--ink);background:var(--surface)}
@@ -477,7 +478,8 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
         </div>
 
         <div class="update">
-          <h2>Valheim 1.0 “Deep North” — release day, 9 September</h2>
+          <h2 id="upd-title">Checking for a server update…</h2>
+          <div id="upd-detail" class="lede"></div>
           <p class="lede">Updating is not a background job. Here is exactly what <span class="mono">update</span> does to Lowood-AU:</p>
           <ul class="consequences">
             <li class="hard">Stops the server. Anyone playing is disconnected without warning.</li>
@@ -982,7 +984,7 @@ function renderOverview(){
   $('#o-slots').textContent = `${s.players.count} / ${s.players.max}`; $('#o-slotfill').style.width = (100*s.players.count/s.players.max)+'%';
   const x = s.extras;
   $('#o-world').innerHTML = kv([['Objects', num(x.world_objects)],['Save file', mb(x.world_bytes)],['Last save', ago(s.last_save)],['A save takes', x.save_seconds == null ? '—' : `${x.save_seconds} s`],['Backups kept', `${count(x.backups)} of ${S.config.BACKUPS_KEEP ?? '?'}`],['Autosave every', `${S.config.SAVE_INTERVAL/60} min`]]);
-  $('#o-proc').innerHTML = kv([['State', s.running?'running':'stopped'],['Process', s.pid?`pid ${s.pid}`:'—'],['Uptime', s.running?s.uptime_human:'—'],['Memory (RSS)', s.running?`${(x.rss_mb/1024).toFixed(1)} GB`:'—'],['Version', s.version],['Listening', `${s.connection.ip ?? ip}:${s.connection.port}`]]);
+  $('#o-proc').innerHTML = kv([['State', s.running?'running':'stopped'],['Process', s.pid?`pid ${s.pid}`:'—'],['Uptime', s.running?s.uptime_human:'—'],['Memory (RSS)', s.running?`${(x.rss_mb/1024).toFixed(1)} GB`:'—'],['Version', s.version],['Listening', s.connection.crossplay && x.public_endpoint ? x.public_endpoint : `${s.connection.ip ?? ip}:${s.connection.port}`],['Reachable at', s.connection.crossplay && x.public_endpoint ? `${s.connection.ip}:${s.connection.port} on the LAN` : '—']]);
   const m = S.mod; const eff = effective(m);
   const parts = [`Preset <b>${m.preset||'none'}</b>`];
   MOD_ORDER.forEach(k => { const o = m.modifiers[k]; if (o) parts.push(`${MOD_LABEL[k]} <b>${pretty(o)}</b> <span class="faint">(override)</span>`); });
@@ -1109,7 +1111,8 @@ $('#apply').addEventListener('click', async () => {
   changes.setkeys = { toggles:draft.setkeys.toggles.slice(), numeric:{} }; NUMERIC.forEach(k => { const f = server.setkeys.numeric[k] ?? 100, t = draft.setkeys.numeric[k] ?? 100; if (f !== t) changes.setkeys.numeric[k] = t; });
   const r = await api.patch('/modifiers', KEY, { changes });
   if (r.status !== 200){ toast(`Not applied (${r.status}): ${r.body.detail||'server rejected the change'}.`, 8000); return; }
-  await loadModifiers(); renderStatus();
+  await loadModifiers();
+  renderStatus();
   toast(r.body.restart_required ? `Applied. Restart ${S.config.SERVER_NAME} to put the new rules in force.` : 'Applied.', 7000);
   r.body.warnings.forEach(w => toast(w, 9000));
 });
@@ -1164,6 +1167,41 @@ function normLine(l){
   return { t: l.t ?? null, raw: null, msg: l.msg ?? '', cls: l.cls };
 }
 function fmtLine(line){ const l = normLine(line); const cls = l.cls || (/error|exception/i.test(l.msg) ? 'err' : /warn/i.test(l.msg) ? 'warn' : ''); return `<span class="ln ${cls}">${esc(l.raw ?? stamp(l.t))}: ${esc(l.msg).replace(/(join code \d{6})/, '<b>$1</b>')}</span>`; }
+// ── Update check ─────────────────────────────────────────────────────────────
+// Replaces a hard-coded "1.0 releases tomorrow" banner, which was already
+// wrong the day after it was written and said nothing about THIS server.
+// Compares the installed Steam build id against the public branch.
+async function loadUpdates(){
+  const title = $('#upd-title'), detail = $('#upd-detail');
+  if (!title) return;
+  const r = await api.get('/updates', KEY);
+  if (r.status !== 200){
+    title.textContent = 'Could not check for updates';
+    detail.innerHTML = `Steam\u2019s build API did not answer (${r.status}). ` +
+      `This is <b>not</b> the same as being up to date \u2014 try again later.`;
+    return;
+  }
+  const u = r.body;
+  const fmt = b => b ? `<span class="mono">${esc(String(b))}</span>` : '<span class="faint">unknown</span>';
+  if (u.update_available === true){
+    title.textContent = 'A server update is available';
+    detail.innerHTML = `Installed ${fmt(u.installed_buildid)} \u2192 available ${fmt(u.available_buildid)} on the ` +
+      `<span class="mono">${esc(u.branch)}</span> branch. Here is exactly what ` +
+      `<span class="mono">update</span> does to ${esc(S.status?.server_name || 'this server')}:`;
+    $('.update')?.setAttribute('data-attention', '1');
+  } else if (u.update_available === false){
+    title.textContent = 'Up to date';
+    detail.innerHTML = `Running build ${fmt(u.installed_buildid)}, which is what the ` +
+      `<span class="mono">${esc(u.branch)}</span> branch is serving. ` +
+      `Nothing to do${u.cached ? ' (checked within the last 5 minutes)' : ''}.`;
+    $('.update')?.removeAttribute('data-attention');
+  } else {
+    title.textContent = 'Update status unknown';
+    detail.innerHTML = `Installed ${fmt(u.installed_buildid)}, available ${fmt(u.available_buildid)}. ` +
+      `One of the two could not be read, so this is <b>not</b> a clean bill of health.`;
+  }
+}
+
 async function loadLogs(){ const r = await api.get('/logs', KEY); logbox.innerHTML = r.body.lines.map(fmtLine).join(''); scrollLog(); }
 logListeners.add(l => { logbox.insertAdjacentHTML('beforeend', fmtLine(l)); if (following) scrollLog(); });
 function scrollLog(){ if (following) logbox.scrollTop = logbox.scrollHeight; }
@@ -1208,6 +1246,7 @@ function toast(msg, ms=4000){ const t = document.createElement('div'); t.classNa
 
 /* ===================== START ===================== */
 async function startApp(firstStatus){
+  loadUpdates();  // build check runs once on entry, then on demand
   status = firstStatus; renderStatus();
   await Promise.all([loadModifiers(), loadConfig(), loadLogs(), loadMods()]);
   poll();
