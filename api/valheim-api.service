@@ -24,8 +24,8 @@ ExecStartPre=__SCRIPT_DIR__/api-manager.sh setup
 
 # Run uvicorn directly as the foreground process so systemd can track it.
 ExecStart=__SCRIPT_DIR__/.venv/bin/uvicorn api.main:app \
-    --host 127.0.0.1 \
-    --port 8080 \
+    --host ${API_HOST} \
+    --port ${API_PORT} \
     --workers 1 \
     --log-level info \
     --access-log
@@ -37,6 +37,17 @@ ExecStart=__SCRIPT_DIR__/.venv/bin/uvicorn api.main:app \
 Restart=on-failure
 RestartSec=5
 
+# Defaults, so a .env missing these cannot expand to an empty --host and make
+# uvicorn fail with an opaque error. EnvironmentFile is applied after
+# Environment, so the .env values win when present.
+Environment=API_HOST=127.0.0.1
+Environment=API_PORT=8080
+
+# API_HOST and API_PORT come from here and are expanded into ExecStart above.
+# They used to be hard-coded as 127.0.0.1:8080 while .env also defined them —
+# two sources of truth that disagreed, so setting API_HOST in .env silently did
+# nothing. That cost an hour of 502s from a reverse proxy that could not reach
+# a service the config said was listening.
 EnvironmentFile=__SCRIPT_DIR__/.env
 
 NoNewPrivileges=yes
