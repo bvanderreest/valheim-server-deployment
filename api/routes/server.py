@@ -1,6 +1,7 @@
 import os
 import re
 import socket
+import asyncio
 import subprocess
 import time
 from collections import deque
@@ -8,9 +9,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 
 from ..config import settings
+from ..services import jobs as jobsvc
 from ..models import ActionResponse, ConnectionInfo, PlayerInfo, StatusResponse
 
 router = APIRouter()
@@ -275,24 +277,11 @@ def _get_server_ip() -> str:
         return "127.0.0.1"
 
 
-def _run_manager_command(command: str) -> None:
-    """Run a valheim-server-manager.sh command in a background thread."""
-    import logging
-    logger = logging.getLogger(__name__)
-    try:
-        result = subprocess.run(
-            [str(settings.manager_script), command],
-            cwd=str(settings.script_dir),
-            timeout=300,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            logger.error("manager command %r exited %d: %s", command, result.returncode, result.stderr.strip())
-    except subprocess.TimeoutExpired:
-        logger.error("manager command %r timed out after 300s", command)
-    except Exception as exc:
-        logger.error("manager command %r raised: %s", command, exc)
+# _run_manager_command used to live here. It ran the action with
+# `subprocess.run(capture_output=True, timeout=300)`, which discarded every line
+# the script printed and SIGKILLed anything past five minutes — long enough to
+# kill a SteamCMD write or a world migration. Actions now go through
+# `services.jobs`, which streams the output and imposes no arbitrary deadline.
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -369,7 +358,7 @@ _VALID_ACTIONS: dict[str, str] = {
 
 
 @router.post("/server/{action}", status_code=202, response_model=ActionResponse)
-async def server_action(action: str, background_tasks: BackgroundTasks) -> ActionResponse:
+async def server_action(action: str) -> ActionResponse:
     if action not in _VALID_ACTIONS:
         raise HTTPException(
             status_code=422,
@@ -380,11 +369,23 @@ async def server_action(action: str, background_tasks: BackgroundTasks) -> Actio
     if action == "stop" and not _is_running():
         raise HTTPException(status_code=409, detail="Server is not running.")
 
-    background_tasks.add_task(_run_manager_command, action)
+    # One action at a time. Previously two POSTs both returned 202 and both
+    # spawned a subprocess — two concurrent backups, or an update racing a
+    # restart, with nothing to notice. The pid checks above never caught it
+    # because neither process had changed the pid yet.
+    busy = jobsvc.active_for()
+    if busy is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Busy: '{busy.action}' is still running (job {busy.id}). Wait for it to finish.",
+        )
+
+    job = jobsvc.start(action, loop=asyncio.get_running_loop())
     return ActionResponse(
         action=action,
         accepted=True,
         message=_VALID_ACTIONS[action],
+        job_id=job.id,
     )
 
 
@@ -404,5 +405,10 @@ async def get_capabilities() -> dict:
             "modifiers": True,
             "mods": True,
             "log_stream": True,
+            # An action returns a job_id and its progress can be followed at
+            # /v1/jobs/{id}/stream. A consumer that does not understand this can
+            # still poll /status as before, so it is additive.
+            "job_stream": True,
+            "performance": True,
         },
     }

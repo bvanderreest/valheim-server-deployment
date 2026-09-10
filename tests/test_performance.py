@@ -142,7 +142,11 @@ def test_endpoint_is_key_gated(monkeypatch):
 
 
 def test_endpoint_answers_under_v1(monkeypatch):
+    # Pin the clock. Without this the test depends on the date it is run: the
+    # log below is fixed at 09/09 and a 24 h window stopped containing it the
+    # moment the date rolled over.
     monkeypatch.setattr(perf, "_lines_covering", lambda start, budget=0: REAL_LOG)
+    monkeypatch.setattr(perf, "_now", lambda: _epoch("09/09/2026 11:00:00"))
     c = TestClient(app)
     r = c.get("/v1/performance?hours=24")
     assert r.status_code == 200
@@ -157,3 +161,20 @@ def test_window_is_bounded():
     c = TestClient(app)
     assert c.get("/v1/performance?hours=999").status_code == 422
     assert c.get("/v1/performance?hours=0").status_code == 422
+
+
+def test_the_window_is_relative_to_a_pinnable_clock(monkeypatch):
+    """Guards the class of bug, not the instance.
+
+    Every figure this module produces is relative to "now". If the clock is not
+    injectable, a fixed-fixture test silently becomes date-dependent and starts
+    failing on a day nobody changed anything.
+    """
+    monkeypatch.setattr(perf, "_lines_covering", lambda start, budget=0: REAL_LOG)
+    monkeypatch.setattr(perf, "_now", lambda: _epoch("09/09/2026 11:00:00"))
+    from fastapi.testclient import TestClient as _TC
+    a = _TC(app).get("/v1/performance?hours=6").json()
+    monkeypatch.setattr(perf, "_now", lambda: _epoch("09/20/2026 11:00:00"))
+    b = _TC(app).get("/v1/performance?hours=6").json()
+    assert len(a["events"]) == 3, "clock pinned to the log's own day sees its events"
+    assert len(b["events"]) == 0, "eleven days later the same log is out of window"

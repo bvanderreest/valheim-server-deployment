@@ -31,6 +31,7 @@ correct. Everything leaves here as an epoch, which has no such ambiguity.
 from __future__ import annotations
 
 import re
+import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
@@ -302,11 +303,21 @@ def summarise(events: list[dict], kind: str, span_hours: float) -> dict:
     }
 
 
+def _now() -> float:
+    """Wall clock, as a seam.
+
+    Not an abstraction for its own sake: every window in this module is
+    relative to "now", so a test that cannot pin the clock is a test that
+    passes on the day it is written and fails the next. One already did —
+    test_endpoint_answers_under_v1 used a hardcoded log dated the previous day
+    against a 24 h window, and went red the moment the date rolled over.
+    """
+    return time.time()
+
+
 def collect(window_hours: float, now: Optional[float] = None) -> dict:
     """Stall history for the last `window_hours`, from the live log."""
-    import time as _time
-
-    now = now if now is not None else _time.time()
+    now = now if now is not None else _now()
     lines = _lines_covering(now - window_hours * 3600)
     parsed = parse_all(lines)
     events, context = parsed["events"], parsed["context"]
