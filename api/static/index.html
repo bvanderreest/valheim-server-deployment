@@ -499,6 +499,35 @@ p{margin:0}
 .modrow .acts{margin-left:auto;display:flex;gap:6px}
 .callout{border-left:3px solid var(--accent-fill);padding:8px 12px;background:var(--surface);border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-2);max-width:60ch;margin-top:16px}
 
+/* ---------- activity feed + disk ---------- */
+.feed{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.feed li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;
+  padding:7px 0;border-top:1px solid var(--line);font-size:13px}
+.feed li:first-child{border-top:0}
+.feed .ic{width:7px;height:7px;border-radius:50%;background:var(--line-strong);align-self:center}
+.feed li[data-kind="join"] .ic{background:var(--good)}
+.feed li[data-kind="leave"] .ic{background:var(--line-strong)}
+.feed li[data-kind="auth_failed"] .ic{background:var(--danger)}
+.feed li[data-kind="save"] .ic{background:var(--accent-fill)}
+.feed .when{color:var(--ink-3);font-size:12px;font-family:var(--mono);white-space:nowrap}
+.feed .what b{font-weight:600}
+.feed li[data-kind="auth_failed"] .what{color:var(--danger)}
+/* The bar is free space against the point the SERVER stops saving, not a
+   percentage we invented. */
+#o-diskfill{background:var(--good)}
+#o-diskfill[data-state="warning"]{background:var(--accent-fill)}
+#o-diskfill[data-state="blocked"]{background:var(--danger)}
+
+/* ---------- save phases ---------- */
+.phases{display:grid;gap:5px;margin-top:8px}
+.phases .p{display:grid;grid-template-columns:120px 1fr auto;gap:10px;align-items:center;font-size:12.5px}
+.phases .p .bar{height:6px;border-radius:3px;background:var(--inset);overflow:hidden}
+.phases .p .bar i{display:block;height:100%;border-radius:3px;background:var(--line-strong)}
+.phases .p[data-blocking="1"] .bar i{background:var(--danger)}
+.phases .p .ms{font-family:var(--mono);color:var(--ink-2);white-space:nowrap}
+.phase-note{font-size:12px;color:var(--ink-3);margin-top:8px;line-height:1.5}
+.phase-note b{color:var(--ink);font-weight:600}
+
 /* ---------- lock ---------- */
 /* Served through the Hugin Portal the key lives on the Portal, not in this
    browser, so "forget the key on this device" has nothing to forget and would
@@ -715,6 +744,9 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
         <div class="panel">
           <h2>World <small>CrowsNest</small></h2>
           <dl class="kv" id="o-world"></dl>
+          <!-- 1.0 saves in five stages with the blocking prep before them, so a
+               single "a save takes N" hides which part players actually feel. -->
+          <div id="o-phases"></div>
         </div>
         <div class="panel">
           <h2>Process</h2>
@@ -724,6 +756,21 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
           <h2>Rules in force <small>from <span class="mono">/modifiers</span></small></h2>
           <div id="o-rules" class="muted" style="font-size:13.5px;line-height:1.6"></div>
           <div style="margin-top:10px"><button class="link" data-nav="difficulty">Open the difficulty editor</button></div>
+        </div>
+
+        <!-- Added after a real session in which the server logged a refused
+             login, a join, a leave and its own disk threshold, and none of it
+             reached this screen. Both panels read /activity. -->
+        <div class="panel">
+          <h2>Disk headroom <small>the server's own limit</small></h2>
+          <dl class="kv" id="o-disk"><dt>Reading the log…</dt><dd>—</dd></dl>
+          <div class="meter" style="margin-top:8px"><div class="track"><div class="fill" id="o-diskfill"></div></div></div>
+          <p class="muted" id="o-disknote" style="font-size:12.5px;margin-top:8px"></p>
+        </div>
+
+        <div class="panel">
+          <h2>Recent activity <small>joins, leaves, refusals, saves</small></h2>
+          <ol class="feed" id="o-feed"><li class="muted">Reading the log…</li></ol>
         </div>
 
         <div class="panel perf">
@@ -1440,6 +1487,14 @@ function renderStatus(){
 // assuming otherwise rendered "undefined MB" and "[object Object]" live.
 function num(v){ return typeof v === 'number' ? v.toLocaleString() : '—'; }
 function mb(bytes){ return typeof bytes === 'number' ? `${(bytes/1048576).toFixed(1)} MB` : '—'; }
+// Disk figures span megabytes to hundreds of gigabytes, so mb() alone is
+// unreadable at the top end.
+function bytes(n){
+  if (typeof n !== 'number') return '—';
+  const u = ['B','KB','MB','GB','TB']; let i = 0;
+  while (n >= 1024 && i < u.length - 1){ n /= 1024; i++; }
+  return `${n < 10 && i > 0 ? n.toFixed(1) : Math.round(n)} ${u[i]}`;
+}
 function count(v){ return Array.isArray(v) ? v.length : (typeof v === 'number' ? v : 0); }
 function ago(t){
   if (t === null || t === undefined || t === '') return '—';
@@ -2529,10 +2584,101 @@ function confirmDialog({ title, body, confirmLabel='Confirm', hold=false, danger
 function toast(msg, ms=4000){ const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; $('#toasts').appendChild(t); setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 400); }, ms); }
 
 /* ===================== START ===================== */
+/* ===== activity =====
+   Everything here came out of one real session: a player was refused for a
+   wrong password and nothing said so; the server states its own disk
+   stop-saving threshold on every save and nothing read it; and a save is five
+   stages plus blocking prep, of which only a single total was ever shown. */
+const ACTIVITY_WORDS = {
+  join:        e => `<b>A player joined</b> — ${e.players} on the server`,
+  leave:       e => `A player left — ${e.players} still connected`,
+  auth_failed: e => `<b>Refused: wrong password</b> — ${esc(String(e.peer||'a client'))}`,
+  save:        e => `World saved${e.save_number ? ` (#${e.save_number})` : ''}` +
+                    (e.blocking_ms != null ? ` — froze ${Math.round(e.blocking_ms)} ms` : ''),
+  character:   e => e.alive ? `${esc(e.name)} spawned in` : `${esc(e.name)} left the world`,
+  world_load:  e => `World loaded — save #${e.save_number}`,
+  session_registered: e => `Join code issued`,
+};
+
+function clock(iso){
+  if (!iso) return '';
+  const d = new Date(iso);
+  return isNaN(d) ? '' : d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+
+function renderFeed(events){
+  const host = $('#o-feed'); if (!host) return;
+  // Newest first, and only the kinds a person would act on. `character` is
+  // dropped: it duplicates join/leave from the other side.
+  const show = events.filter(e => e.kind !== 'character').slice(-12).reverse();
+  if (!show.length){ host.innerHTML = '<li class="muted">Nothing since the server started.</li>'; return; }
+  host.innerHTML = show.map(e => {
+    const words = ACTIVITY_WORDS[e.kind];
+    return `<li data-kind="${esc(e.kind)}"><span class="ic"></span>` +
+           `<span class="what">${words ? words(e) : esc(e.kind)}</span>` +
+           `<span class="when">${clock(e.at)}</span></li>`;
+  }).join('');
+}
+
+function renderDisk(d){
+  const kv = $('#o-disk'), fill = $('#o-diskfill'), note = $('#o-disknote');
+  if (!kv) return;
+  if (!d){
+    kv.innerHTML = '<dt>Free space</dt><dd>—</dd>';
+    if (note) note.textContent = 'The server reports this on each save; none seen yet.';
+    return;
+  }
+  kv.innerHTML =
+    `<dt>Free space</dt><dd>${bytes(d.free_bytes)}</dd>` +
+    `<dt>Saving stops below</dt><dd>${bytes(d.blocked_below_bytes)}</dd>` +
+    `<dt>State</dt><dd>${d.state === 'ok' ? 'Healthy' : d.state === 'warning' ? 'Low' : 'SAVING BLOCKED'}</dd>`;
+  // Scale against the warn line, not the disk size: what matters is distance
+  // to the point the server stops saving, and a 200 GB disk would otherwise
+  // render every state as a full bar.
+  const ceiling = Math.max(d.warn_below_bytes * 4, d.free_bytes ? Math.min(d.free_bytes, d.warn_below_bytes * 4) : 1);
+  if (fill){
+    fill.style.width = Math.max(2, Math.min(100, (d.free_bytes / ceiling) * 100)) + '%';
+    fill.dataset.state = d.state;
+  }
+  if (note){
+    note.textContent = d.state === 'blocked'
+      ? 'The server has STOPPED SAVING. Free space now — the world is not being written.'
+      : d.state === 'warning'
+        ? 'Below the server\u2019s own warning line. It stops saving entirely at the figure above.'
+        : 'These are the server\u2019s own thresholds, not ours.';
+  }
+}
+
+function renderSavePhases(save){
+  const host = $('#o-phases'); if (!host) return;
+  if (!save || !save.phases || !save.phases.length){ host.innerHTML = ''; return; }
+  const max = Math.max(...save.phases.map(p => p.ms), 1);
+  const bars = save.phases.map(p =>
+    `<div class="p" data-blocking="${p.blocking ? 1 : 0}">` +
+    `<span>${esc(p.name)}</span>` +
+    `<span class="bar"><i style="width:${Math.max(2, (p.ms / max) * 100)}%"></i></span>` +
+    `<span class="ms">${Math.round(p.ms)} ms</span></div>`).join('');
+  // The note sits OUTSIDE .phases: inside it, the grid laid out its inline
+  // <b> runs as if they were columns.
+  host.innerHTML = `<div class="phases">${bars}</div>` +
+    `<p class="phase-note">Red phases freeze the world; the rest are background writes. ` +
+    `This save froze it for <b>${Math.round(save.blocking_ms || 0)} ms</b>, then wrote for ` +
+    `<b>${Math.round(save.total_ms || 0)} ms</b>.</p>`;
+}
+
+async function loadActivity(){
+  const r = await api.get('/activity?limit=60', KEY);
+  if (r.status !== 200) return;
+  const d = r.body || {};
+  renderFeed(d.events || []);
+  renderDisk(d.disk);
+  renderSavePhases(d.last_save);
+}
+
 async function startApp(firstStatus){
   loadUpdates();  // build check runs once on entry, then on demand
   status = firstStatus; renderStatus();
-  await Promise.all([loadModifiers(), loadConfig(), loadLogs(), loadMods(), loadPerf()]);
+  await Promise.all([loadModifiers(), loadConfig(), loadLogs(), loadMods(), loadPerf(), loadActivity()]);
   resumeJob();  // a reload used to abandon a running update entirely
   poll();
 }

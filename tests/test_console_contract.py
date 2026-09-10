@@ -71,3 +71,41 @@ def test_no_undated_claim_about_a_future_game_update():
 def test_key_surfaces_are_present(needle):
     """A crude smoke check that a bad merge has not dropped a whole feature."""
     assert needle in HTML
+
+
+_TEXT = CONSOLE.read_text(encoding="utf-8")
+
+
+# ── the activity panels ──────────────────────────────────────────────────────
+# Added after a real session: the server logged a refused login, a join, a leave
+# and its own stop-saving threshold, and the console showed none of it.
+
+def test_the_console_asks_for_activity():
+    assert "/activity" in _TEXT, "the console never requests the activity endpoint"
+
+
+@pytest.mark.parametrize("mount", ["o-feed", "o-disk", "o-phases", "o-diskfill"])
+def test_every_activity_mount_point_exists(mount):
+    """renderFeed/renderDisk/renderSavePhases each target one id. A renamed or
+    missing id fails silently — the panel just stays on 'Reading the log…'."""
+    assert f'id="{mount}"' in _TEXT, f"#{mount} is missing from the markup"
+
+
+def test_the_disk_panel_can_show_every_state():
+    """A panel that can only ever say 'Healthy' is decoration. The blocked case
+    is the one that matters: below that threshold the server stops saving."""
+    for state in ("warning", "blocked"):
+        assert state in _TEXT, f"the disk panel has no {state} state"
+    assert "STOPPED SAVING" in _TEXT, "the blocked state does not say what it means"
+
+
+def test_the_phase_breakdown_distinguishes_blocking_from_writing():
+    """A single total hides which part players feel."""
+    assert 'data-blocking=' in _TEXT
+    assert "freeze the world" in _TEXT
+
+
+def test_a_refused_login_is_worded_as_a_refusal():
+    """It is the event that prompted all of this and it must not read as noise."""
+    assert "auth_failed" in _TEXT
+    assert "wrong password" in _TEXT.lower()

@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from .auth import require_api_key
 from .config import settings
 from .models import HealthResponse
+from .routes.activity import router as activity_router
 from .routes.config import router as config_router
 from .routes.logs import router as logs_router
 from .routes.metrics import router as metrics_router
@@ -98,6 +99,7 @@ app.include_router(modifiers_router, dependencies=[Depends(require_api_key)], de
 app.include_router(updates_router, dependencies=[Depends(require_api_key)], deprecated=True)
 app.include_router(performance_router, dependencies=[Depends(require_api_key)], deprecated=True)
 app.include_router(jobs_router, dependencies=[Depends(require_api_key)], deprecated=True)
+app.include_router(activity_router, dependencies=[Depends(require_api_key)], deprecated=True)
 
 # ── API versioning (#80) ──────────────────────────────────────────────────────
 # Everything is also mounted under /v1. The bare paths stay as permanent,
@@ -109,7 +111,7 @@ _V1 = "/v1"
 CONTRACT_VERSION = "1.0.0"   # CoreHost Game Server API
 
 for _r in (server_router, config_router, modifiers_router, mods_router, logs_router, updates_router,
-           performance_router, jobs_router):
+           performance_router, jobs_router, activity_router):
     app.include_router(_r, prefix=_V1, dependencies=[Depends(require_api_key)])
 app.include_router(metrics_router, prefix=_V1)
 
