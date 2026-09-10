@@ -77,32 +77,99 @@ def _tail_log(n: int) -> list[str]:
         return []
 
 
+# The server's own tally, in the two places it states it.
+_RE_NOW_PLAYERS = re.compile(r"now (\d+) player\(s\)")
+_RE_CONNECTIONS = re.compile(r"\bConnections (\d+)\b")
+# "Got character ZDOID from <name> : <id>:<n>"; 0:0 means no character.
+_RE_ZDOID = re.compile(r"Got character ZDOID from (.+?) : (-?\d+):(-?\d+)")
+_RE_ZDO_ABANDONED = re.compile(r"Destroying abandoned non persistent zdo (-?\d+:-?\d+) owner (-?\d+)")
+
+
 def _get_player_info() -> PlayerInfo:
+    """How many players are on, taken from the server's own count.
+
+    This used to infer it: count "Server: New peer connected" lines, subtract
+    "RPC_Disconnect" lines, clamp at zero. That is arithmetic on two event
+    streams that are not guaranteed to pair up, and they do not — a join that
+    fails the password check logs RPC_Disconnect and never logs a connect:
+
+        09:58:12  Player joined server ... now 1 player(s)
+        09:58:21  Peer playfab/DBC9329C0FB021F9 has wrong password
+        09:58:21  RPC_Disconnect                       <- no matching connect
+        09:58:59  Player joined server ... now 1 player(s)
+        09:59:05  Server: New peer connected
+
+    One connect, one disconnect, so the count read 0 while a player was stood
+    in the world. It also reported `names: ["Getge"]` at the same time, which is
+    the tell: a count and a name list that contradict each other are not two
+    facts, they are one inference and one observation.
+
+    The server states the number itself, twice over, so read it instead:
+
+        Player joined server "Lowood-AU" that has join code 375598, now 1 player(s)
+        Player connection lost server ... now 0 player(s)
+         Connections 1 ZDOS:419859  sent:0 recv:410
+
+    Whichever appears last wins — both are the server's own tally.
+
+    BUT the tally counts SOCKETS, not people. When a player drops, Valheim may
+    hold their socket open for a reconnect window, and says so:
+
+        10:08:56  Keep socket for playfab/... , try to reconnect before timeout
+        10:08:56  Player connection lost ... now 1 player(s)   <- still 1
+        10:08:57  Destroying abandoned non persistent zdo 498541589:1 owner ...
+
+    Reading the tally alone therefore reports a player who has already quit,
+    for as long as the grace window lasts. The ZDO being destroyed is the
+    signal that they are actually gone, so character state decides the count
+    whenever we have any, and the socket tally only covers the case where
+    somebody is connected but has not spawned yet.
+    """
     tail = _tail_log(2000)
 
-    # Anchor to the last server start so we only count connections in the
-    # current session — avoids treating historical log entries as live players
+    # Anchor to the last server start so we only read the current session.
     start_idx = 0
     for i, line in enumerate(tail):
         if "Valheim version:" in line or "Game server connected" in line:
             start_idx = i
     session_lines = tail[start_idx:]
 
-    connected = sum(1 for line in session_lines if "Server: New peer connected" in line)
-    disconnected = sum(1 for line in session_lines if "RPC_Disconnect" in line)
-    count = max(0, connected - disconnected)
-
-    names: list[str] = []
+    connected: Optional[int] = None       # sockets, per the server's own tally
+    alive: dict[str, bool] = {}           # name -> has a live character
+    zdo_of: dict[str, str] = {}           # name -> that character's ZDO id
     for line in session_lines:
-        if "Got character ZDOID from" not in line:
-            continue
-        if " 0:0" in line:
-            continue
-        m = re.search(r"Got character ZDOID from (.+?) :", line)
-        if m:
-            names.append(m.group(1).strip())
+        if (m := _RE_NOW_PLAYERS.search(line)) or (m := _RE_CONNECTIONS.search(line)):
+            try:
+                connected = int(m.group(1))
+            except ValueError:
+                pass
+        if (m := _RE_ZDOID.search(line)):
+            name = m.group(1).strip()
+            zid = f"{m.group(2)}:{m.group(3)}"
+            # "<name> : 0:0" is a character with no ZDO — logged out or dead.
+            alive[name] = zid != "0:0"
+            zdo_of[name] = zid
+        if (m := _RE_ZDO_ABANDONED.search(line)):
+            # The real "they are gone" signal. See the docstring: the server's
+            # own count does NOT drop when it holds a socket for a reconnect.
+            for name, zid in zdo_of.items():
+                if zid == m.group(1):
+                    alive[name] = False
 
-    return PlayerInfo(count=count, max=settings.max_players, names=sorted(set(names)))
+    in_world = sum(1 for ok in alive.values() if ok)
+    names = sorted(n for n, ok in alive.items() if ok)
+
+    if alive:
+        # Character evidence exists, so it decides. A held socket inflates
+        # `connected`; a live ZDO cannot be faked by a socket.
+        count = in_world
+    elif connected is not None:
+        # Somebody is connected but has not spawned a character yet.
+        count = connected
+    else:
+        count = 0
+
+    return PlayerInfo(count=count, max=settings.max_players, names=names)
 
 
 def _get_version() -> Optional[str]:

@@ -56,3 +56,11 @@ def save_total_ms(line: str) -> float | None:
         return float(raw)
     except (TypeError, ValueError):
         return None
+
+
+# When a player drops, Valheim may HOLD THE SOCKET for a reconnect window — and
+# during it `now N player(s)` still counts them. The character's ZDO being
+# destroyed is the signal that they are really gone.
+RE_KEEP_SOCKET = re.compile(r"Keep socket for (\S+), try to reconnect before timeout")
+RE_ZDO_ABANDONED = re.compile(
+    r"Destroying abandoned non persistent zdo (-?\d+:-?\d+) owner (-?\d+)")
