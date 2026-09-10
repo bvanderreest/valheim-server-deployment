@@ -48,8 +48,27 @@ from . import findings as _findings
 #   Total: 660.936870 ms (FindLiveObjects: 39.809871 ms CreateObjectMapping: ...)
 #   09/09/2026 10:55:13:  Connections 0 ZDOS:419858  sent:0 recv:0
 _RE_TS = re.compile(r"^(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}):")
-_RE_SAVE_CLONE = re.compile(r"PrepareSave: clone done in (\d+)ms")
-_RE_SAVE_ZDO = re.compile(r"ZDOExtraData\.PrepareSave done in (\d+) ?ms")
+# Valheim 1.0 (l-1.0.7, network 39) rewrote these lines. The repo has to read
+# BOTH: `rollback()` targets default_pre1_0, so a server can legitimately be on
+# either build, and a parser that understands only one silently reports no
+# stalls at all rather than failing loudly.
+#
+#   0.221.12  PrepareSave: clone done in 256ms
+#             PrepareSave: ZDOExtraData.PrepareSave done in 337 ms
+#   1.0.7     GetSaveClonePerChunk. Calculated number of actual chunk files: 20
+#               Number of dirty chunks to save: 20 [290ms]
+#             PrepareSave: ZDOExtraData.PrepareSave done [305ms]
+#
+# 1.0 also went chunked — the clone cost is now per-chunk — so the two builds'
+# numbers describe different work. The stall is still clone + ZDOExtraData on
+# both, which is what a player feels either way.
+_RE_SAVE_CLONE = re.compile(
+    r"PrepareSave: clone done in (\d+)\s*ms"          # 0.221
+    r"|GetSaveClonePerChunk\..*?\[(\d+)\s*ms\]"       # 1.0
+)
+_RE_SAVE_ZDO = re.compile(
+    r"ZDOExtraData\.PrepareSave done (?:in\s*)?\[?(\d+)\s*ms\]?"
+)
 _RE_SAVE_TOTAL = re.compile(r"World saved \(\s*([0-9.]+)ms\s*\)")
 _RE_UNLOAD = re.compile(r"Loaded Objects now: (\d+)")
 _RE_GC_TOTAL = re.compile(r"^Total: ([0-9.]+) ms \(FindLiveObjects")
@@ -180,7 +199,8 @@ def parse_all(lines: list[str]) -> dict:
                 first_ts = ts
 
         if (m := _RE_SAVE_CLONE.search(line)):
-            clone_ms = int(m.group(1))
+            # Two alternatives, one group each — whichever build we are on.
+            clone_ms = int(next(g for g in m.groups() if g))
             clone_ts = ts if ts is not None else last_ts
             continue
 
