@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 
 from ..config import settings
+from ..services import logfmt
 from ..services import jobs as jobsvc
 from ..models import ActionResponse, ConnectionInfo, PlayerInfo, StatusResponse
 
@@ -141,18 +142,18 @@ def _rss_mb(pid: int | None) -> float | None:
 
 
 def _save_seconds() -> float | None:
-    """How long the last world save took. Valheim logs 'World saved ( 4637.014ms )'.
+    """How long the last world save took.
+
+    Both log formats, via logfmt — 1.0 renamed the line and this returned None
+    on every 1.0 server, which is why the console showed "A save takes —".
 
     This is the number that tells an operator whether saves are getting
     expensive as the world grows, so it is worth surfacing.
     """
     for line in reversed(_tail_log(400)):
-        m = re.search(r"World saved \(\s*([0-9.]+)ms\s*\)", line)
-        if m:
-            try:
-                return round(float(m.group(1)) / 1000, 2)
-            except ValueError:
-                return None
+        ms = logfmt.save_total_ms(line)
+        if ms is not None:
+            return round(ms / 1000, 2)
     return None
 
 
@@ -257,8 +258,8 @@ def _get_last_save() -> Optional[str]:
     try:
         with logfile.open("r", errors="replace") as f:
             for line in f:
-                if "World saved" in line:
-                    m = re.search(r"\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}", line)
+                if logfmt.is_save_done(line):
+                    m = logfmt.RE_TIMESTAMP.search(line)
                     if m:
                         last = m.group(0)
     except OSError:
@@ -271,7 +272,7 @@ def _get_last_save() -> Optional[str]:
         # mis-parsed dates for day <= 12 and returned None for day > 12
         # (ValueError), so last_save was wrong or missing most of the month.
         # metrics.py already had this right; the two disagreed.
-        dt = datetime.strptime(last, "%m/%d/%Y %H:%M:%S").replace(tzinfo=timezone.utc)
+        dt = datetime.strptime(last, logfmt.TIMESTAMP_FORMAT).replace(tzinfo=timezone.utc)
         return dt.isoformat().replace("+00:00", "Z")
     except ValueError:
         return None

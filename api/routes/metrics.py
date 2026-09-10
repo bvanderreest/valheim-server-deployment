@@ -20,6 +20,7 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
 from ..config import settings
+from ..services import logfmt
 from ..routes.server import (
     _get_player_info,
     _get_uptime_seconds,
@@ -48,7 +49,6 @@ router = APIRouter(tags=["metrics"])
 
 _RE_SAVE_CLONE = re.compile(r"PrepareSave: clone done in (\d+)ms")
 _RE_SAVE_ZDO = re.compile(r"ZDOExtraData\.PrepareSave done in (\d+) ?ms")
-_RE_SAVE_TOTAL = re.compile(r"World saved \(\s*([0-9.]+)ms\s*\)")
 _RE_GC_TOTAL = re.compile(r"^Total: ([0-9.]+) ms \(FindLiveObjects")
 _RE_LOADED = re.compile(r"Loaded Objects now: (\d+)")
 _RE_CONN = re.compile(r"Connections (\d+) ZDOS:(\d+)\s+sent:(\d+) recv:(\d+)")
@@ -82,8 +82,8 @@ def _stall_metrics() -> dict[str, float]:
             if clone is not None:
                 # Both halves of one PrepareSave; this is the frozen window.
                 out["save_stall_seconds"] = (clone + zdo) / 1000
-        elif (m := _RE_SAVE_TOTAL.search(line)):
-            out["save_duration_seconds"] = float(m.group(1)) / 1000
+        elif (ms := logfmt.save_total_ms(line)) is not None:
+            out["save_duration_seconds"] = ms / 1000
         elif (m := _RE_GC_TOTAL.match(line)):
             out["gc_pause_seconds"] = float(m.group(1)) / 1000
         elif (m := _RE_LOADED.search(line)):
@@ -144,14 +144,14 @@ def _last_save_age_seconds() -> float:
         last_save_line = None
         with logfile.open() as f:
             for line in f:
-                if "World saved" in line:
+                if logfmt.is_save_done(line):
                     last_save_line = line
         if not last_save_line:
             return -1
-        m = re.match(r"(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}):", last_save_line)
+        m = logfmt.RE_TIMESTAMP.search(last_save_line)
         if not m:
             return -1
-        ts = datetime.strptime(m.group(1), "%m/%d/%Y %H:%M:%S")
+        ts = datetime.strptime(m.group(0), logfmt.TIMESTAMP_FORMAT)
         return time.time() - ts.timestamp()
     except Exception:
         return -1

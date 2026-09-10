@@ -31,6 +31,8 @@ correct. Everything leaves here as an epoch, which has no such ambiguity.
 from __future__ import annotations
 
 import re
+
+from . import logfmt
 import time
 from collections import deque
 from datetime import datetime
@@ -69,7 +71,6 @@ _RE_SAVE_CLONE = re.compile(
 _RE_SAVE_ZDO = re.compile(
     r"ZDOExtraData\.PrepareSave done (?:in\s*)?\[?(\d+)\s*ms\]?"
 )
-_RE_SAVE_TOTAL = re.compile(r"World saved \(\s*([0-9.]+)ms\s*\)")
 _RE_UNLOAD = re.compile(r"Loaded Objects now: (\d+)")
 _RE_GC_TOTAL = re.compile(r"^Total: ([0-9.]+) ms \(FindLiveObjects")
 _RE_CONN = re.compile(r"Connections (\d+) ZDOS:(\d+)\s+sent:(\d+) recv:(\d+)")
@@ -222,8 +223,9 @@ def parse_all(lines: list[str]) -> dict:
             clone_ms = clone_ts = None
             continue
 
-        if (m := _RE_SAVE_TOTAL.search(line)):
-            total = float(m.group(1))
+        # save_total_ms, not m.group(1): the 0.221 total is group 1 and the 1.0
+        # total is group 2, so reading group 1 gives None on every 1.0 line.
+        if (total := logfmt.save_total_ms(line)) is not None:
             when = ts if ts is not None else last_ts
             for ev in reversed(events):
                 if ev["kind"] != "save":
