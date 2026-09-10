@@ -59,6 +59,11 @@ def parse(lines: list[str]) -> dict[str, Any]:
     saves: list[dict[str, Any]] = []
     cur: dict[str, Any] = {}          # the save being assembled
     session: dict[str, Any] = {}
+    # name -> when we first and last saw them, and whether they are on now.
+    # Bounded by the tail we were given: this is "seen in the log we can read",
+    # not "since the beginning of time", and the API says so.
+    roster: dict[str, dict[str, Any]] = {}
+    zdo_owner: dict[str, str] = {}          # zdo id -> name
     retries = 0
     last_ts: Optional[float] = None
 
@@ -84,8 +89,25 @@ def parse(lines: list[str]) -> dict[str, Any]:
             add("leave", ts, server=m.group(1), players=int(m.group(2)))
             continue
         if (m := logfmt.RE_ZDOID.search(line)):
-            alive = not (m.group(2) == "0" and m.group(3) == "0")
-            add("character", ts, name=m.group(1).strip(), alive=alive)
+            name = m.group(1).strip()
+            zid = f"{m.group(2)}:{m.group(3)}"
+            alive = zid != "0:0"
+            r = roster.setdefault(name, {"name": name, "first_seen": _iso(ts),
+                                         "last_seen": None, "active": False})
+            r["last_seen"] = _iso(ts)
+            r["active"] = alive
+            if alive:
+                zdo_owner[zid] = name
+            add("character", ts, name=name, alive=alive)
+            continue
+        if (m := logfmt.RE_ZDO_ABANDONED.search(line)):
+            # The real "they are gone" signal — the server's own player count
+            # does not drop while it holds their socket for a reconnect.
+            owner = zdo_owner.get(m.group(1))
+            if owner and owner in roster:
+                roster[owner]["active"] = False
+                roster[owner]["last_seen"] = _iso(ts)
+                add("leave_confirmed", ts, name=owner)
             continue
         if (m := logfmt.RE_DISK.search(line)):
             free, blocked, warn = (int(m.group(i)) for i in (1, 2, 3))
@@ -148,4 +170,8 @@ def parse(lines: list[str]) -> dict[str, Any]:
         "session": session or None,
         "join_code_retries": retries,
         "auth_failures": [e for e in events if e["kind"] == "auth_failed"],
+        # Active first, then most recently seen.
+        "players": sorted(roster.values(),
+                          key=lambda r: (not r["active"], r["last_seen"] or ""),
+                          reverse=False),
     }

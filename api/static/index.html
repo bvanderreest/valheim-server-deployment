@@ -499,6 +499,18 @@ p{margin:0}
 .modrow .acts{margin-left:auto;display:flex;gap:6px}
 .callout{border-left:3px solid var(--accent-fill);padding:8px 12px;background:var(--surface);border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-2);max-width:60ch;margin-top:16px}
 
+/* ---------- player roster ---------- */
+.roster{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:0}
+.roster li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;
+  padding:7px 0;border-top:1px solid var(--line);font-size:13.5px}
+.roster li:first-child{border-top:0}
+.roster .nm{font-weight:500}
+.roster li[data-active="1"] .nm{font-weight:600}
+/* Departed players stay legible but recede — the panel is about who is on. */
+.roster li:not([data-active="1"]) .nm{color:var(--ink-2)}
+.roster .seen{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.roster li[data-active="1"] .seen{color:var(--good);font-weight:500}
+
 /* ---------- activity feed + disk ---------- */
 .feed{list-style:none;margin:0;padding:0;display:grid;gap:0}
 .feed li{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:baseline;
@@ -507,6 +519,7 @@ p{margin:0}
 .feed .ic{width:7px;height:7px;border-radius:50%;background:var(--line-strong);align-self:center}
 .feed li[data-kind="join"] .ic{background:var(--good)}
 .feed li[data-kind="leave"] .ic{background:var(--line-strong)}
+.feed li[data-kind="leave_confirmed"] .ic{background:var(--line-strong)}
 .feed li[data-kind="auth_failed"] .ic{background:var(--danger)}
 .feed li[data-kind="save"] .ic{background:var(--accent-fill)}
 .feed .when{color:var(--ink-3);font-size:12px;font-family:var(--mono);white-space:nowrap}
@@ -1621,7 +1634,15 @@ function backupsKept(x){
 function renderOverview(){
   const s = status;
   $('#o-count').textContent = `${s.players.count} online`;
-  $('#o-players').innerHTML = s.players.count ? s.players.names.map(n=>`<div class="player"><span class="dot on"></span>${esc(n)}</div>`).join('') : `<p class="players-empty">Nobody is on. ${s.running ? 'The server is up and listed — the join code on the left gets them in.' : 'The server is stopped.'}</p>`;
+  // The roster (who has been on, and when) is filled by renderRoster() from
+  // /activity. This only handles the case where we have no roster yet, so the
+  // panel is never blank on first paint.
+  const ph = $('#o-players');
+  if (ph && !ph.dataset.roster){
+    ph.innerHTML = s.players.count
+      ? s.players.names.map(n=>`<div class="player"><span class="dot on"></span>${esc(n)}</div>`).join('')
+      : `<p class="players-empty">Nobody is on. ${s.running ? 'The server is up and listed — the join code on the left gets them in.' : 'The server is stopped.'}</p>`;
+  }
   $('#o-slots').textContent = `${s.players.count} / ${s.players.max}`; $('#o-slotfill').style.width = (100*s.players.count/s.players.max)+'%';
   const x = s.extras;
   $('#o-world').innerHTML = kv([['Objects', num(x.world_objects)],['Save file', mb(x.world_bytes)],['Last save', ago(s.last_save)],['A save takes', x.save_seconds == null ? '—' : `${x.save_seconds} s`],['Backups kept', backupsKept(x)],['Autosave every', conf('SAVE_INTERVAL') ? `${conf('SAVE_INTERVAL')/60} min` : '—']]);
@@ -2591,7 +2612,11 @@ function toast(msg, ms=4000){ const t = document.createElement('div'); t.classNa
    stages plus blocking prep, of which only a single total was ever shown. */
 const ACTIVITY_WORDS = {
   join:        e => `<b>A player joined</b> — ${e.players} on the server`,
-  leave:       e => `A player left — ${e.players} still connected`,
+  // The server's own leave event fires while it may still be HOLDING the
+  // socket for a reconnect, so its count often has not dropped yet. Say so
+  // rather than printing a number that looks wrong.
+  leave:       e => `A connection dropped${e.players ? ` — ${e.players} still counted while the socket is held` : ''}`,
+  leave_confirmed: e => `<b>${esc(e.name)} left the world</b>`,
   auth_failed: e => `<b>Refused: wrong password</b> — ${esc(String(e.peer||'a client'))}`,
   save:        e => `World saved${e.save_number ? ` (#${e.save_number})` : ''}` +
                     (e.blocking_ms != null ? ` — froze ${Math.round(e.blocking_ms)} ms` : ''),
@@ -2666,11 +2691,41 @@ function renderSavePhases(save){
     `<b>${Math.round(save.total_ms || 0)} ms</b>.</p>`;
 }
 
+/* Who has played, and when they were last here. Asked for after a session in
+   which the panel could say "0 online" and nothing else — no sense of who the
+   server is for or whether anyone had been on at all today. */
+function since(iso){
+  if (!iso) return '';
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) return '';
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return 'just now';
+  if (s < 3600) return `${Math.round(s/60)} min ago`;
+  if (s < 86400) return `${Math.round(s/3600)} h ago`;
+  return `${Math.round(s/86400)} d ago`;
+}
+
+function renderRoster(players){
+  const host = $('#o-players'); if (!host) return;
+  host.dataset.roster = '1';
+  if (!players || !players.length){
+    host.innerHTML = `<p class="players-empty">Nobody has been on since the log we can read begins.</p>`;
+    return;
+  }
+  host.innerHTML = `<ul class="roster">` + players.map(p =>
+    `<li${p.active ? ' data-active="1"' : ''}>` +
+    `<span class="dot${p.active ? ' on' : ''}"></span>` +
+    `<span class="nm">${esc(p.name)}</span>` +
+    `<span class="seen">${p.active ? 'active now' : `last seen ${since(p.last_seen)}`}</span>` +
+    `</li>`).join('') + `</ul>`;
+}
+
 async function loadActivity(){
   const r = await api.get('/activity?limit=60', KEY);
   if (r.status !== 200) return;
   const d = r.body || {};
   renderFeed(d.events || []);
+  renderRoster(d.players || []);
   renderDisk(d.disk);
   renderSavePhases(d.last_save);
 }

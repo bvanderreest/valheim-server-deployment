@@ -62,8 +62,17 @@ class Event(BaseModel):
     model_config = {"extra": "allow"}
 
 
+class Player(BaseModel):
+    """Bounded by the log tail we can read, not "since the world began"."""
+    name: str
+    first_seen: Optional[str] = None
+    last_seen: Optional[str] = None
+    active: bool = False
+
+
 class ActivityResponse(BaseModel):
     events: list[Event]
+    players: list[Player] = []
     disk: Optional[Disk] = None
     last_save: Optional[Save] = None
     save_in_progress: bool = False

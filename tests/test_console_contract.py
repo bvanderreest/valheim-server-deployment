@@ -109,3 +109,30 @@ def test_a_refused_login_is_worded_as_a_refusal():
     """It is the event that prompted all of this and it must not read as noise."""
     assert "auth_failed" in _TEXT
     assert "wrong password" in _TEXT.lower()
+
+
+# ── the player roster ────────────────────────────────────────────────────────
+
+def test_the_players_panel_renders_a_roster():
+    assert "renderRoster" in _TEXT
+    assert 'class="roster"' in _TEXT
+
+
+def test_the_roster_shows_both_states():
+    """'active now' and a last-seen time. A roster that can only say one of
+    them is a list of names."""
+    assert "active now" in _TEXT
+    assert "last seen" in _TEXT
+
+
+def test_last_seen_is_relative_and_bounded():
+    """since() must cover minutes through days, or every departed player reads
+    the same."""
+    for unit in ("just now", "min ago", "h ago", "d ago"):
+        assert unit in _TEXT, f"since() has no {unit!r} case"
+
+
+def test_the_held_socket_is_explained_rather_than_shown_as_a_wrong_number():
+    """The server's leave event fires while it may still hold the socket, so
+    its count has often not dropped. Printing it bare reads as a bug."""
+    assert "socket is held" in _TEXT

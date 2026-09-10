@@ -110,3 +110,43 @@ def test_an_unfinished_save_is_reported_as_in_progress():
 
 def test_a_finished_save_is_not_in_progress(t):
     assert t["save_in_progress"] is False
+
+
+# ── who has been on, and when ────────────────────────────────────────────────
+
+def test_the_roster_lists_who_joined(t):
+    names = [p["name"] for p in t["players"]]
+    assert names == ["Getge"]
+
+
+def test_the_roster_knows_they_are_no_longer_on(t):
+    """The session ends with a disconnect the server did NOT count: it held the
+    socket and kept saying 'now 1 player(s)'. The roster follows the character,
+    so it says what a person would say."""
+    p = t["players"][0]
+    assert p["active"] is False
+    assert p["last_seen"] == "2026-09-10T10:08:57Z", (
+        "last seen should be when the character ZDO went, not when the socket did")
+    assert p["first_seen"] == "2026-09-10T09:59:25Z"
+
+
+def test_someone_still_playing_is_flagged_active():
+    lines = [
+        "09/10/2026 09:44:02: Valheim version: l-1.0.7 (network version 39)",
+        '09/10/2026 09:58:59: Player joined server "Lowood-AU" that has join code 123456, now 1 player(s)',
+        "09/10/2026 09:59:25: Got character ZDOID from Getge : 498541589:1",
+    ]
+    p = parse(lines)["players"][0]
+    assert p["active"] is True
+    assert p["last_seen"] == "2026-09-10T09:59:25Z"
+
+
+def test_active_players_sort_before_departed_ones():
+    lines = [
+        "09/10/2026 09:44:02: Valheim version: l-1.0.7 (network version 39)",
+        "09/10/2026 09:50:00: Got character ZDOID from Departed : 111:1",
+        "09/10/2026 09:55:00: Got character ZDOID from Departed : 0:0",
+        "09/10/2026 09:59:25: Got character ZDOID from Playing : 222:1",
+    ]
+    names = [p["name"] for p in parse(lines)["players"]]
+    assert names[0] == "Playing", f"active player should lead the list, got {names}"
