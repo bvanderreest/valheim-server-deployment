@@ -20,7 +20,13 @@ from fastapi import APIRouter
 from fastapi.responses import PlainTextResponse
 
 from ..config import settings
-from ..routes.server import _get_uptime_seconds, _is_running, _read_pid, _get_player_info
+from ..routes.server import (
+    _get_player_info,
+    _get_uptime_seconds,
+    _is_running,
+    _read_pid,
+)
+from ..routes.server import _world_bytes as _status_world_bytes
 
 router = APIRouter(tags=["metrics"])
 
@@ -118,14 +124,16 @@ def _backup_count() -> int:
 
 
 def _world_size_bytes() -> int:
-    world_name = settings.world_name
-    for candidate in [
-        Path("/srv/valheim/worlds/worlds_local") / f"{world_name}.db",
-        settings.script_dir / "worlds" / "worlds_local" / f"{world_name}.db",
-    ]:
-        if candidate.exists():
-            return candidate.stat().st_size
-    return 0
+    """Delegates to the /status implementation — deliberately not a second one.
+
+    This used to carry its own copy: two hardcoded paths, both ending in
+    `<World>.db`. Valheim 1.0 moved the world into a `<World>/` directory of
+    .chunk files, so the flat file stopped existing and this reported 0 while
+    /status — which was layout-aware — correctly reported 12,962,792 bytes.
+    Two implementations of one question will always drift; the fix is to have
+    one.
+    """
+    return _status_world_bytes() or 0
 
 
 def _last_save_age_seconds() -> float:

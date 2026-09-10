@@ -81,3 +81,67 @@ def test_metrics_needs_no_key():
         assert bare.get("/v1/metrics").status_code == 200
     finally:
         app.dependency_overrides[require_api_key] = lambda: "test-api-key"
+
+
+# ── World size and ZDO count across both builds ───────────────────────────────
+# Valheim 1.0 moved the world from a flat `<World>.db` into a `<World>/`
+# directory of .chunk files. /status was layout-aware; /metrics carried its own
+# flat-only copy and silently reported 0 while /status reported 12,962,792 on
+# the same server. Two implementations of one question drifted, exactly as they
+# always do.
+
+def test_metrics_world_size_matches_status_not_a_second_implementation():
+    """They must be the SAME function, not two that agree today."""
+    import api.routes.metrics as met
+    import api.routes.server as srv
+
+    assert met._status_world_bytes is srv._world_bytes, (
+        "metrics must delegate to the /status implementation"
+    )
+
+
+def test_world_size_reads_a_chunked_1_0_world(tmp_path, monkeypatch):
+    import api.routes.server as srv
+
+    wl = tmp_path / "worlds_local" / "CrowsNest"
+    wl.mkdir(parents=True)
+    (wl / "00_00__0_1.chunk").write_bytes(b"x" * 1000)
+    (wl / "14_1c__2_1.chunk").write_bytes(b"y" * 2000)
+    (wl / "_main.4.db2").write_bytes(b"z" * 500)
+    monkeypatch.setattr(srv.settings, "savedir", tmp_path, raising=False)
+    monkeypatch.setattr(srv.settings, "world_name", "CrowsNest", raising=False)
+    assert srv._world_bytes() == 3500
+
+
+def test_world_size_still_reads_a_flat_0221_world(tmp_path, monkeypatch):
+    """rollback() targets default_pre1_0, so the flat layout is still live."""
+    import api.routes.server as srv
+
+    wl = tmp_path / "worlds_local"
+    wl.mkdir(parents=True)
+    (wl / "CrowsNest.db").write_bytes(b"x" * 4242)
+    monkeypatch.setattr(srv.settings, "savedir", tmp_path, raising=False)
+    monkeypatch.setattr(srv.settings, "world_name", "CrowsNest", raising=False)
+    assert srv._world_bytes() == 4242
+
+
+def test_zdo_count_reads_both_build_formats(monkeypatch):
+    """1.0 reports the count thousands-separated and lower-case, in a different
+    line. Reading only the 0.221 form left world_objects at None on every
+    updated server."""
+    import api.routes.server as srv
+
+    for line, expected in [
+        ("09/09/2026 10:25:07: Saved 419858 ZDOs", 419858),
+        ("09/10/2026 03:54:00: ZDOMan.LoadChunks - Starting to load 419,858 zdos"
+         " from 20 Chunks. SessionID: 2211697597, WorldVersion: 41 [DeepNorth]", 419858),
+    ]:
+        monkeypatch.setattr(srv, "_tail_log", lambda n=400, _l=line: [_l])
+        assert srv._world_objects() == expected, line[:60]
+
+
+def test_the_old_zdo_pattern_alone_would_have_missed_1_0():
+    """Names the regression."""
+    import re
+    old = re.compile(r"Saved (\d+) ZDOs")
+    assert not old.search("ZDOMan.LoadChunks - Starting to load 419,858 zdos from 20 Chunks")

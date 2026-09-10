@@ -156,12 +156,23 @@ def _save_seconds() -> float | None:
     return None
 
 
+# Both builds report the ZDO count, in different lines and different formats:
+#   0.221.12  Saved 419858 ZDOs
+#   1.0.7     ZDOMan.LoadChunks - Starting to load 419,858 zdos from 20 Chunks
+# The 1.0 form is thousands-separated and lower-case. Reading only the first
+# left world_objects at None on every updated server.
+_RE_ZDOS = re.compile(
+    r"Saved ([\d,]+) ZDOs"                                   # 0.221
+    r"|Starting to load ([\d,]+) zdos"                       # 1.0
+)
+
+
 def _world_objects() -> int | None:
-    """ZDO count from 'Saved 419858 ZDOs' — the real driver of save cost."""
+    """ZDO count — the real driver of save cost. Read from either build."""
     for line in reversed(_tail_log(400)):
-        m = re.search(r"Saved (\d+) ZDOs", line)
+        m = _RE_ZDOS.search(line)
         if m:
-            return int(m.group(1))
+            return int(next(g for g in m.groups() if g).replace(",", ""))
     return None
 
 
