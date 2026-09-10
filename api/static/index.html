@@ -500,6 +500,11 @@ p{margin:0}
 .callout{border-left:3px solid var(--accent-fill);padding:8px 12px;background:var(--surface);border-radius:0 8px 8px 0;font-size:13px;color:var(--ink-2);max-width:60ch;margin-top:16px}
 
 /* ---------- lock ---------- */
+/* Served through the Hugin Portal the key lives on the Portal, not in this
+   browser, so "forget the key on this device" has nothing to forget and would
+   only lock the user out of a console they are entitled to. */
+body[data-proxied="1"] #lock-btn{display:none}
+
 .lock{position:fixed;inset:0;background:var(--bg);z-index:50;display:grid;place-items:center;padding:20px}
 .lock[hidden]{display:none}
 .lockcard{width:min(420px,100%);border:1px solid var(--line);background:var(--surface);border-radius:14px;padding:26px 26px 22px;box-shadow:var(--shadow)}
@@ -1245,6 +1250,9 @@ const mockApi = {
 
 /* ===================== AUTH ===================== */
 let KEY = null;
+// True when the console is being served through the Hugin Portal, which
+// injects the API key upstream. See detectProxied().
+let PROXIED = false;
 const lock = $('#lock'), lockErr = $('#lock-err'), keyIn = $('#key');
 // Which one are we? Decided by evidence, not by a build flag: ask the
 // unauthenticated /health endpoint. Served by FastAPI -> real. Opened as a
@@ -1271,8 +1279,33 @@ async function detectMode(){
   return LIVE;
 }
 
+// Behind the Hugin Portal there is no key in this browser and there never will
+// be: the Portal holds it and injects X-API-Key server-side. The console used
+// to gate purely on localStorage, so through the Portal it showed the lock
+// screen anyway — asking for a key the user does not have, to reach an API that
+// was already answering. The Portal's whole promise is that this screen never
+// appears, and it did.
+//
+// The test is behavioural, not a flag or a header we have to agree on: ask an
+// endpoint that REQUIRES a key, without sending one. A 200 can only mean
+// something upstream authenticated us.
+async function detectProxied(){
+  try {
+    const res = await fetch(API_BASE + '/status', { method: 'GET' });
+    return res.ok;
+  } catch { return false; }
+}
+
 async function boot(){
   await detectMode();
+  if (LIVE && await detectProxied()){
+    PROXIED = true;
+    // KEY stays null. _req() omits the header entirely when it is, and the
+    // proxy supplies the real one on the way past.
+    document.body.dataset.proxied = '1';
+    const r = await api.get('/status', null);
+    if (r.status === 200){ lock.hidden = true; startApp(r.body); return; }
+  }
   const h = await api.health();
   $('#lock-name').textContent = h.server_label;
   const reachable = h.status !== 'unreachable';
@@ -1755,8 +1788,10 @@ async function followJob(jobId, action){
   const ctrl = new AbortController(); JOB.ctrl = ctrl;
   let res;
   try {
+    // KEY is null when proxied; an explicit header would send the string
+    // "null" and earn a 401 from the very endpoint that was working.
     res = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/stream`,
-                      { headers: { 'X-API-Key': KEY }, signal: ctrl.signal });
+                      { headers: KEY ? { 'X-API-Key': KEY } : {}, signal: ctrl.signal });
   } catch (e) {
     // The action is still running on the server; only our view of it is gone.
     $('#job-result').hidden = false; $('#job-result').dataset.ok = '0';
