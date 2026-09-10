@@ -4,6 +4,7 @@ Same rule as test_metrics_stalls.py: every log line below is copied verbatim
 from /srv/valheim/logs on the running server. Every log-parsing bug this repo
 has shipped came from a regex written against an imagined format.
 """
+import re
 from datetime import datetime
 
 import pytest
@@ -178,3 +179,73 @@ def test_the_window_is_relative_to_a_pinnable_clock(monkeypatch):
     b = _TC(app).get("/v1/performance?hours=6").json()
     assert len(a["events"]) == 3, "clock pinned to the log's own day sees its events"
     assert len(b["events"]) == 0, "eleven days later the same log is out of window"
+
+
+# ── Both builds ───────────────────────────────────────────────────────────────
+# Valheim 1.0 rewrote the save lines. `rollback()` targets default_pre1_0, so a
+# server can legitimately be on either build and the parser must read both. A
+# parser that understands one silently reports NO stalls on the other — it does
+# not fail, it just goes quiet, which is the worst way for a metric to break.
+#
+# Every line below is verbatim from a real server: the 0.221 ones from
+# Lowood-AU before the update, the 1.0 ones from the same server after it.
+
+LOG_0221 = """09/09/2026 10:25:02: PrepareSave: clone done in 256ms
+09/09/2026 10:25:03: PrepareSave: ZDOExtraData.PrepareSave done in 337 ms
+09/09/2026 10:25:07: Saved 419858 ZDOs
+09/09/2026 10:25:07: World saved ( 4404.237ms )
+""".splitlines(keepends=True)
+
+LOG_10 = """09/10/2026 01:47:47: Available space to current user: 183088992256. Saving is blocked if below: 43102906 bytes. Warnings are given if below: 86205812
+09/10/2026 01:47:47: GetSaveClonePerChunk. Calculated number of actual chunk files: 20  Number of dirty chunks to save: 20 [290ms]
+09/10/2026 01:47:47: PrepareSave: ZDOExtraData.PrepareSave done [305ms]
+09/10/2026 01:47:47:  ### Save World Thread Started! ###
+""".splitlines(keepends=True)
+
+
+def test_reads_the_0221_save_format():
+    events, _, _ = perf.parse_events(LOG_0221)
+    save = next(e for e in events if e["kind"] == "save")
+    assert save["ms"] == 256 + 337
+    assert save["total_ms"] == pytest.approx(4404.237)
+    assert save["zdos"] == 419858
+
+
+def test_reads_the_1_0_save_format():
+    """1.0 went chunked: the clone cost moved into GetSaveClonePerChunk and the
+    duration moved from `done in 337 ms` to `done [305ms]`."""
+    events, _, _ = perf.parse_events(LOG_10)
+    save = next(e for e in events if e["kind"] == "save")
+    assert save["ms"] == 290 + 305
+    assert save["exact"] is True
+
+
+def test_the_1_0_format_alone_would_have_reported_nothing():
+    """Names the regression. Before this fix every save regex was 0.221-only,
+    so an updated server reported zero stalls — a metric that had gone silent,
+    not one that had failed."""
+    old_clone = re.compile(r"PrepareSave: clone done in (\d+)ms")
+    old_zdo = re.compile(r"ZDOExtraData\.PrepareSave done in (\d+) ?ms")
+    text = "".join(LOG_10)
+    assert not old_clone.search(text)
+    assert not old_zdo.search(text)
+    # and the shipped patterns do match
+    assert perf._RE_SAVE_CLONE.search(text)
+    assert perf._RE_SAVE_ZDO.search(text)
+
+
+def test_disk_space_line_survived_the_rewrite():
+    """Not everything changed — assert the ones that did not, so a future
+    rewrite of THESE is caught too."""
+    p = perf.parse_all(LOG_10)
+    assert p["disk"][0]["free"] == 183088992256
+    assert p["disk"][0]["block_below"] == 43102906
+
+
+def test_a_failed_1_0_save_does_not_look_like_a_successful_one():
+    """The first 1.0 save on Lowood-AU crashed in SaveSystem.ConsiderBackup
+    after PrepareSave completed. The stall is real and should be reported, but
+    it must not acquire a total_ms it never had."""
+    events, _, _ = perf.parse_events(LOG_10)
+    save = next(e for e in events if e["kind"] == "save")
+    assert save["total_ms"] is None, "a save that never completed has no wall time"

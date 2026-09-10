@@ -1465,7 +1465,8 @@ function checkPending(){
   if (p.action === 'start' && s.running && s.pid) done = `Started. pid ${s.pid}, join code ${s.connection.join_code}.`;
   if (p.action === 'stop' && !s.running) done = 'Stopped. World saved before exit.';
   if (p.action === 'restart' && s.running && s.pid && s.pid !== p.pidBefore) done = `Restarted — new pid ${s.pid}. Join code is now ${s.connection.join_code}.`;
-  if (p.action === 'backup' && s.last_save !== p.saveBefore) done = `Backed up. Save took ${S.extras.save_seconds} s.`;
+  // backup has NO /status proxy — see the note below. Its completion comes
+  // from the job stream, so there is deliberately no branch for it here.
   if (p.action === 'update' && !s.running && s.version !== p.versionBefore) done = `Updated to ${s.version}. The server is stopped — start it when you're ready.`;
   // BUG THIS REPLACES: backup keyed off last_save moving, which a backup does
   // not move — so a 21-second backup sat here until the give-up fired, or an
@@ -1498,15 +1499,47 @@ function attachHold(btn, onDone){
 }
 
 /* ===================== OVERVIEW ===================== */
+/* Live config first, mock state only as the demo fallback. Reading S.config
+   against a real server is how the Overview reported the DEMO's BACKUPS_KEEP
+   (6) beside a real file count (7) — "7 of 6". */
+/* Names come from /status when we have it — that is the running server's own
+   answer, not a config file's idea of it. */
+function srvName(){ return (status && status.server_name) || conf('SERVER_NAME') || 'this server'; }
+function worldName(){ return (status && status.world_name) || conf('WORLD_NAME') || 'the world'; }
+
+function conf(key){
+  const v = (cfg && cfg[key] !== undefined) ? cfg[key] : (S.config /* demo-fallback */ ? S.config[key] : undefined);
+  if (v === undefined || v === null || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : v;
+}
+
+/* Retention only prunes archives it made — `world-<WORLD>-*.tar.gz`. Anything
+   else in the folder (a hand-rolled pre-1.0 snapshot, an emergency capture) is
+   kept forever by design, so counting it against the retention limit produces
+   a number that looks broken and can never come down. Count the managed ones,
+   and mention the rest rather than hiding them. */
+function backupsKept(x){
+  const all = Array.isArray(x.backups) ? x.backups : [];
+  const world = conf('WORLD_NAME') ?? (status && status.world_name) ?? '';
+  const managed = all.filter(b => b && typeof b.name === 'string'
+                    && b.name.startsWith(`world-${world}-`));
+  const keep = conf('BACKUPS_KEEP');
+  const extra = all.length - managed.length;
+  return `${managed.length} of ${keep ?? '?'}`
+       + (extra > 0 ? ` (+${extra} kept aside)` : '');
+}
+
 function renderOverview(){
   const s = status;
   $('#o-count').textContent = `${s.players.count} online`;
   $('#o-players').innerHTML = s.players.count ? s.players.names.map(n=>`<div class="player"><span class="dot on"></span>${esc(n)}</div>`).join('') : `<p class="players-empty">Nobody is on. ${s.running ? 'The server is up and listed — the join code on the left gets them in.' : 'The server is stopped.'}</p>`;
   $('#o-slots').textContent = `${s.players.count} / ${s.players.max}`; $('#o-slotfill').style.width = (100*s.players.count/s.players.max)+'%';
   const x = s.extras;
-  $('#o-world').innerHTML = kv([['Objects', num(x.world_objects)],['Save file', mb(x.world_bytes)],['Last save', ago(s.last_save)],['A save takes', x.save_seconds == null ? '—' : `${x.save_seconds} s`],['Backups kept', `${count(x.backups)} of ${S.config.BACKUPS_KEEP ?? '?'}`],['Autosave every', `${S.config.SAVE_INTERVAL/60} min`]]);
+  $('#o-world').innerHTML = kv([['Objects', num(x.world_objects)],['Save file', mb(x.world_bytes)],['Last save', ago(s.last_save)],['A save takes', x.save_seconds == null ? '—' : `${x.save_seconds} s`],['Backups kept', backupsKept(x)],['Autosave every', conf('SAVE_INTERVAL') ? `${conf('SAVE_INTERVAL')/60} min` : '—']]);
   $('#o-proc').innerHTML = kv([['State', s.running?'running':'stopped'],['Process', s.pid?`pid ${s.pid}`:'—'],['Uptime', s.running?s.uptime_human:'—'],['Memory (RSS)', s.running?`${(x.rss_mb/1024).toFixed(1)} GB`:'—'],['Version', s.version],['Listening', s.connection.crossplay && x.public_endpoint ? x.public_endpoint : `${s.connection.ip ?? ip}:${s.connection.port}`],['Reachable at', s.connection.crossplay && x.public_endpoint ? `${s.connection.ip}:${s.connection.port} on the LAN` : '—']]);
-  const m = S.mod; const eff = effective(m);
+  // Live modifiers from /modifiers; the mock's only as a demo fallback.
+  const m = server /* demo-fallback */ || S.mod; const eff = effective(m);
   const parts = [`Preset <b>${m.preset||'none'}</b>`];
   MOD_ORDER.forEach(k => { const o = m.modifiers[k]; if (o) parts.push(`${MOD_LABEL[k]} <b>${pretty(o)}</b> <span class="faint">(override)</span>`); });
   const nk = m.setkeys.toggles.length + Object.keys(m.setkeys.numeric).length;
@@ -1607,7 +1640,7 @@ function mockFollowJob(jobId, action){
   timers.push(setTimeout(() => {
     const at = now()/1000;
     JOB.stages.forEach(s => { if (s.state === 'active'){ s.state = 'done'; s.ended_at = at; } else if (s.state === 'pending'){ s.state = 'skipped'; } });
-    if (action === 'update'){ S.version = 'l-1.0.7 (network version 39)'; }
+    if (action === 'update'){ S.version = 'l-1.0.7 (network version 39)'; /* demo-fallback: mock job only */ }
     jobFinished({ id:jobId, action, state:'succeeded', started_at:t0, ended_at:at,
                   exit_code:0, error:null, line_count:JOB.lines.length, stages:JOB.stages });
   }, last + 700));
@@ -2319,7 +2352,7 @@ $('#discard').addEventListener('click', () => { draft = clone(server); renderDif
 $('#apply').addEventListener('click', async () => {
   const d = diffOf(); if (!d.length) return; const perms = d.filter(x => x.perm);
   const body = `<p>These are written to the server now and take effect at the next restart.</p><ul class="diff">${d.map(x => `<li><span>${esc(x.k)}</span><span>${esc(x.from)} <span class="arrow">→</span> <b>${esc(x.to)}</b></span></li>`).join('')}</ul>` +
-    (perms.length ? `<div class="perm-block"><b>Permanent for ${esc(S.config.WORLD_NAME)}.</b> Once the server starts with ${perms.map(p=>`<code>${esc(p.k)}</code>`).join(', ')}, ${perms.length>1?'they are':'it is'} written into the world save. Switching ${perms.length>1?'them':'it'} off later changes nothing. The only way back is an older backup.</div>` : '');
+    (perms.length ? `<div class="perm-block"><b>Permanent for ${esc(worldName())}.</b> Once the server starts with ${perms.map(p=>`<code>${esc(p.k)}</code>`).join(', ')}, ${perms.length>1?'they are':'it is'} written into the world save. Switching ${perms.length>1?'them':'it'} off later changes nothing. The only way back is an older backup.</div>` : '');
   const ok = await confirmDialog({ title:'Apply difficulty changes', body, confirmLabel: perms.length ? 'Hold to apply' : 'Apply', hold: perms.length > 0, danger: perms.length > 0 });
   if (!ok) return;
   const changes = {}; if (server.preset !== draft.preset) changes.preset = draft.preset;
@@ -2329,7 +2362,7 @@ $('#apply').addEventListener('click', async () => {
   if (r.status !== 200){ toast(`Not applied (${r.status}): ${r.body.detail||'server rejected the change'}.`, 8000); return; }
   await loadModifiers();
   renderStatus();
-  toast(r.body.restart_required ? `Applied. Restart ${S.config.SERVER_NAME} to put the new rules in force.` : 'Applied.', 7000);
+  toast(r.body.restart_required ? `Applied. Restart ${srvName()} to put the new rules in force.` : 'Applied.', 7000);
   r.body.warnings.forEach(w => toast(w, 9000));
 });
 
@@ -2430,8 +2463,8 @@ function renderMods_(mods){
   const v = $('#mods-view');
   const installer = `<div class="inrow"><input class="input" id="mod-id" placeholder="Thunderstore id or URL, e.g. ValheimModding/Jotunn" aria-label="Mod to install"><button class="btn" id="mod-install" type="button">Install</button></div>`;
   if (!mods.length){
-    v.innerHTML = `<div class="empty"><h2>No mods installed</h2><p>${esc(S.config.SERVER_NAME)} runs vanilla Valheim ${esc(S.version)}. Players need nothing extra to join.</p>${installer}</div>
-      <div class="callout">Tomorrow's 1.0 update is a major version. If you install anything today, expect to check it again after updating.</div>`;
+    v.innerHTML = `<div class="empty"><h2>No mods installed</h2><p>${esc(srvName())} runs vanilla Valheim ${esc((status && status.version) || S.version /* demo-fallback */)}. Players need nothing extra to join.</p>${installer}</div>
+      <div class="callout">A major version changes the mod ABI. After any server update, assume every mod needs re-checking before you trust it.</div>`;
   } else {
     v.innerHTML = `<div class="modlist">${mods.map(m => `<div class="modrow"><span class="dot ${m.enabled?'on':''}"></span><div><div class="n">${esc(m.name)}</div><div class="id">${esc(m.id)}</div></div><div class="acts"><button class="btn sm" data-mod="${esc(m.id)}" data-modact="${m.enabled?'disable':'enable'}">${m.enabled?'Disable':'Enable'}</button><button class="btn sm danger" data-mod="${esc(m.id)}" data-modact="remove">Remove</button></div></div>`).join('')}</div>${installer}
       <div class="callout">Enabling or removing a mod takes effect at the next restart.</div>`;

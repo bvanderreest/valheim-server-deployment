@@ -5,6 +5,8 @@ a gate that is only ever tested in its permissive state is not a gate.
 """
 import importlib
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -184,7 +186,17 @@ def test_console_reads_the_fields_the_api_actually_sends():
     # Check for USAGE, not mention — the source explains the old field name in
     # a comment, and a test that cannot tell those apart forces bad comments.
     assert "x.world_size_mb" not in html, "console still reads the stale field"
-    assert "count(x.backups)" in html, "backups is a list, not a count"
+    # `backups` is a LIST of objects; treating it as a number rendered
+    # "[object Object]" against the live API. Assert the console handles it as a
+    # list — not that it calls one particular helper, or the test breaks every
+    # time that helper is renamed while the contract is still honoured.
+    assert "x.backups" in html, "console must read the backups field"
+    assert re.search(r"Array\.isArray\(x\.backups\)|count\(x\.backups\)", html), (
+        "backups must be handled as a list, not used as a number"
+    )
+    assert "x.backups.length" not in html.replace("all.length", ""), (
+        "reading .length directly assumes a list without checking it is one"
+    )
 
 
 # ─── config validation (#the password trap) ──────────────────────────────────
