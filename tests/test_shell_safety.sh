@@ -191,5 +191,74 @@ else
   no "the shipped stop() truncated restart before start"; echo "      $RESTART_OUT"
 fi
 
+# ─────────────────────────────────────────────────────────────────────────────
+# BACKUPS_KEEP drove BOTH our archive retention and Valheim's own autobackup
+# count. "Disable Valheim's autobackup" (0) therefore also meant "delete every
+# archive we own", because the prune reads the same number and `tail -n +1` is
+# every line. Caught before it was applied; these keep it caught.
+# ─────────────────────────────────────────────────────────────────────────────
+echo
+echo "TEST 16: retention NEVER deletes the archive it just made"
+setup
+mkdir -p "$BACKUP_DIR"
+for i in 1 2 3; do echo x > "$BACKUP_DIR/world-CrowsNest-2026-09-0${i}_00-00-00.tar.gz"; done
+PRUNE_OUT="$( ( set -eo pipefail; set +e
+  BACKUP_DIR="$BACKUP_DIR"; WORLD_NAME=CrowsNest
+  for BACKUPS_KEEP in 0 "" abc -3; do
+    keep="${BACKUPS_KEEP:-12}"
+    [[ "${keep}" =~ ^[0-9]+$ ]] || keep=12
+    (( keep < 1 )) && keep=1
+    find "$BACKUP_DIR" -maxdepth 1 -name "world-${WORLD_NAME}-*.tar.gz" \
+      | sort -r | tail -n +$((keep + 1)) | xargs -r rm --
+  done
+  ls -1 "$BACKUP_DIR"/*.tar.gz 2>/dev/null | wc -l ) )"
+if [[ "$PRUNE_OUT" -ge 1 ]]; then
+  ok "hostile BACKUPS_KEEP values (0, empty, abc, -3) still leave an archive"
+else
+  no "retention wiped the directory — the exact data-loss bug"
+fi
+
+echo
+echo "TEST 17: the shipped prune uses the floored variable, not BACKUPS_KEEP raw"
+if grep -qE 'tail -n \+\$\(\(keep \+ 1\)\)' "$REPO/valheim-server-manager.sh" \
+   && grep -qE '\(\( keep < 1 \)\) && keep=1' "$REPO/valheim-server-manager.sh"; then
+  ok "prune reads the floored value"
+else
+  no "prune still reads BACKUPS_KEEP directly"
+fi
+
+echo
+echo "TEST 18: Valheim's autobackup is driven by GAME_BACKUPS, not BACKUPS_KEEP"
+if grep -qE '\-backups "\$\{GAME_BACKUPS\}"' "$REPO/helpers.sh" \
+   && ! grep -qE '\-backups "\$\{BACKUPS_KEEP\}"' "$REPO/helpers.sh"; then
+  ok "the two backup systems no longer share a variable"
+else
+  no "BACKUPS_KEEP still drives Valheim's autobackup — 0 would wipe our archives"
+fi
+
+echo
+echo "TEST 19: -backups is passed explicitly even when disabled"
+# Omitting the flag does NOT disable Valheim's autobackup; it falls back to the
+# game's own default. Silence would look like "off" while it stayed on.
+ARGS_OUT="$( ( set -eo pipefail; set +e
+  source "$REPO/config.conf" >/dev/null 2>&1
+  source "$REPO/helpers.sh"
+  GAME_BACKUPS=0 build_args 2>/dev/null | tr "\n" " " ) )"
+if [[ "$ARGS_OUT" == *"-backups 0"* ]]; then
+  ok "GAME_BACKUPS=0 emits '-backups 0' rather than omitting the flag"
+else
+  no "-backups absent when disabled; the game would use its own default"
+  echo "      args: ${ARGS_OUT:0:160}"
+fi
+
+echo
+echo "TEST 20: the backup unit cannot restart-loop again"
+if ! grep -qE '^Restart=' "$REPO/valheim-backup.service" \
+   && grep -q 'StartLimitBurst=' "$REPO/valheim-backup.service"; then
+  ok "no Restart= on the timer-driven oneshot, and a start limit is set"
+else
+  no "the unit can still loop: a oneshot with Restart= and no limit did 5,884 restarts"
+fi
+
 echo; echo "  ── $PASS passed, $FAIL failed ──"
 [[ $FAIL -eq 0 ]]

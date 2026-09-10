@@ -1,10 +1,17 @@
 [Unit]
 Description=Valheim Server Backup Timer
-Requires=valheim-backup.service
+# NOT Requires= — that couples the timer's own state to the service and starts
+# the service when the timer starts. A timer only needs to name what it triggers,
+# which for a matching unit name is implicit.
 
 [Timer]
 OnCalendar=hourly
+# Catch up after downtime: if the box was off when an hour elapsed, run once on
+# boot rather than silently skipping the window.
 Persistent=true
+# Without this every Valheim host on the same hypervisor tars its world at
+# exactly :00. Spread the load.
+RandomizedDelaySec=300
 
 [Install]
 WantedBy=timers.target

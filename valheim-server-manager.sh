@@ -577,8 +577,16 @@ backup() {
   echo "[backup] OK — ${size}, integrity verified."
 
   # Retention. Timestamp format sorts lexicographically = chronologically.
+  #
+  # Floor of 1, always. `tail -n +1` is EVERY line, so a BACKUPS_KEEP of 0 or a
+  # non-numeric value would hand the whole directory to rm — including the
+  # archive this function just verified seconds ago. There is no configuration
+  # in which "make a backup, then delete it" is the intent.
+  local keep="${BACKUPS_KEEP:-12}"
+  [[ "${keep}" =~ ^[0-9]+$ ]] || keep=12
+  (( keep < 1 )) && keep=1
   find "${BACKUP_DIR}" -maxdepth 1 -name "world-${WORLD_NAME}-*.tar.gz" \
-    | sort -r | tail -n +$((BACKUPS_KEEP + 1)) | xargs -r rm --
+    | sort -r | tail -n +$((keep + 1)) | xargs -r rm --
   return 0
 }
 
