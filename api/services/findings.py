@@ -51,6 +51,20 @@ CV_WATCH, CV_PROBLEM = 0.15, 0.30
 MIN_HALF = 4
 # Disk runway, in days, before free space is worth raising.
 DISK_WATCH_DAYS, DISK_PROBLEM_DAYS = 90, 30
+# ── world growth ─────────────────────────────────────────────────────────────
+# The ZDO count sets the floor for every save's blocking half, forever, and it
+# is the only input we control. Measured on Lowood-AU: ~420k objects buys a
+# ~290 ms freeze, and a Unity asset sweep lands on top of roughly every other
+# save for another ~650 ms. A second of frozen world is the point a player
+# stops calling it "a bit of lag".
+STALL_PAIN_MS = 1000
+# Runway to that point, in days.
+WORLD_WATCH_DAYS, WORLD_PROBLEM_DAYS = 180, 30
+# A world that is being played in gains and loses objects constantly. Below
+# this, a half-over-half difference is noise being extrapolated, and the honest
+# answer is that we cannot see a trend yet.
+WORLD_MIN_GROWTH = 0.005          # 0.5% between halves
+WORLD_MIN_SPAN_H = 6.0            # and at least this long a window
 
 
 def _f(domain: str, id_: str, verdict: str, headline: str,
@@ -461,6 +475,77 @@ def _cfg_world(saves: list[dict]) -> dict:
               "bad a freeze gets. Building more raises it; nothing else does.")
 
 
+def _cfg_world_growth(saves: list[dict], span_hours: float) -> dict:
+    """Is the world getting bigger, and how long until that is felt?
+
+    `world-size` reports the LEVEL — what a save costs at today's object count.
+    This reports the TREND, because the level only becomes a problem by moving,
+    and nothing else here would notice it moving. You would find out from
+    someone complaining.
+    """
+    method = ("Compares the median object count across the two halves of the window and "
+              "projects the save stall forward at that rate. Refuses to answer on a short "
+              "window or a change inside the noise a played-in world produces anyway.")
+    rows = [s for s in saves if s.get("zdos") and s.get("ms") is not None]
+    early, late, n_a, n_b = _halves(rows, "zdos")
+
+    if early is None or late is None:
+        return _f("configuration", "world-growth", UNKNOWN,
+                  "Not enough saves yet to say whether the world is growing.",
+                  [("Saves with an object count", f"{len(rows)}"),
+                   ("Needed", f"{MIN_HALF * 2}")], method)
+
+    if span_hours < WORLD_MIN_SPAN_H:
+        return _f("configuration", "world-growth", UNKNOWN,
+                  f"Window is only {span_hours:.1f} h — too short to call a trend.",
+                  [("Objects now", f"{late:,.0f}"),
+                   ("Window", f"{span_hours:.1f} h"),
+                   ("Needed", f"{WORLD_MIN_SPAN_H:.0f} h")], method)
+
+    change = (late - early) / early if early else 0.0
+    med_ms = st.median(r["ms"] for r in rows)
+    per_object = med_ms / late if late else 0.0
+    at_pain = STALL_PAIN_MS / per_object if per_object else None
+
+    base = [("Objects now", f"{late:,.0f}"),
+            ("Earlier in window", f"{early:,.0f}"),
+            ("Change", f"{change*100:+.2f}%"),
+            ("Current stall", _ms(med_ms))]
+
+    if abs(change) < WORLD_MIN_GROWTH:
+        return _f("configuration", "world-growth", OK,
+                  f"World is steady at {late:,.0f} objects — "
+                  f"{change*100:+.2f}% over {span_hours:.0f} h.",
+                  base + [(f"Stall reaches {_ms(STALL_PAIN_MS)} at",
+                           f"{at_pain:,.0f} objects" if at_pain else "—")], method)
+
+    if change < 0:
+        return _f("configuration", "world-growth", OK,
+                  f"World is shrinking — {change*100:+.2f}% over {span_hours:.0f} h.",
+                  base, method)
+
+    per_day = (late - early) / (span_hours / 24)
+    headroom = (at_pain - late) if at_pain else None
+    days = (headroom / per_day) if (headroom and per_day > 0) else None
+
+    if days is None or days > WORLD_WATCH_DAYS:
+        verdict = OK
+    elif days > WORLD_PROBLEM_DAYS:
+        verdict = WATCH
+    else:
+        verdict = PROBLEM
+
+    return _f("configuration", "world-growth", verdict,
+              f"World is growing {per_day:,.0f} objects/day — "
+              + (f"a {_ms(STALL_PAIN_MS)} freeze in about {days:,.0f} days."
+                 if days is not None else "no projection possible."),
+              base + [("Growth", f"{per_day:,.0f} objects/day"),
+                      (f"Stall reaches {_ms(STALL_PAIN_MS)} at",
+                       f"{at_pain:,.0f} objects" if at_pain else "—"),
+                      ("At this rate", f"{days:,.0f} days" if days is not None else "—")],
+              method)
+
+
 def compute(saves: list[dict], gcs: list[dict], disk: list[dict], net: list[dict],
             incidents: list[dict], span_hours: float, interval_s: Optional[int]) -> list[dict]:
     out = [
@@ -468,6 +553,7 @@ def compute(saves: list[dict], gcs: list[dict], disk: list[dict], net: list[dict
         _hw_disk_space(disk, span_hours), _hw_gc(gcs),
         _net_relay(incidents, span_hours), _net_traffic(net, span_hours),
         _cfg_cadence(saves, interval_s), _cfg_budget(saves, gcs, interval_s),
+        _cfg_world_growth(saves, span_hours),
         _cfg_world(saves),
     ]
     return sorted(out, key=lambda f: (_RANK[f["verdict"]], f["domain"], f["id"]))
