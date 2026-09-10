@@ -36,7 +36,13 @@ build_args() {
   args+=( -nographics -batchmode )
   args+=( -name "${SERVER_NAME}" -port "${PORT}" -world "${WORLD_NAME}" -password "${PASSWORD}" )
   args+=( -public "${PUBLIC}" -savedir "${SAVEDIR}" -logFile "${LOGFILE}" )
-  args+=( -saveinterval "${SAVE_INTERVAL}" -backups "${BACKUPS_KEEP}" -backupshort "${BACKUP_SHORT}" -backuplong "${BACKUP_LONG}" )
+  # GAME_BACKUPS, not BACKUPS_KEEP — the latter is OUR archive retention and
+  # has nothing to do with what the game does inside worlds_local.
+  # Always pass -backups EXPLICITLY. Omitting the flag does not disable Valheim's
+  # autobackup, it falls back to the game's own built-in default — so leaving it
+  # out would look like "disabled" while quietly keeping it on.
+  args+=( -saveinterval "${SAVE_INTERVAL}" -backups "${GAME_BACKUPS}" \
+          -backupshort "${BACKUP_SHORT}" -backuplong "${BACKUP_LONG}" )
   [[ "${CROSSPLAY}" == "true" ]] && args+=( -crossplay )
   [[ -n "${PRESET}" ]] && args+=( -preset "${PRESET}" )
   
