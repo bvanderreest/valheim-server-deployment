@@ -203,10 +203,41 @@ class TestServerAction:
         assert r.json()["action"] == "start"
 
     def test_all_valid_actions_return_action_field(self):
+        from api.services import jobs as jobsvc
+
         for action in ("restart", "backup"):
+            jobsvc._jobs.clear()  # each action is judged on its own
             r = client.post(f"/server/{action}", headers=HEADERS)
             assert r.status_code == 202
             assert r.json()["action"] == action, f"Missing action field for {action}"
+            assert r.json()["job_id"], f"{action} returned no job to follow"
+
+    def test_a_second_action_while_one_runs_is_refused(self):
+        """Two POSTs used to give two 202s and two concurrent subprocesses —
+        two backups at once, or an update racing a restart, with nothing to
+        notice. The pid checks could not catch it: neither had changed the pid
+        yet."""
+        from types import SimpleNamespace
+
+        from api.services import jobs as jobsvc
+
+        d = jobsvc.settings.script_dir
+        slow = d / "slow.sh"
+        slow.write_text("#!/usr/bin/env bash\nsleep 5\n")
+        slow.chmod(0o755)
+        prev = jobsvc.settings
+        jobsvc.settings = SimpleNamespace(manager_script=slow, script_dir=d)
+        try:
+            jobsvc._jobs.clear()
+            assert client.post("/server/backup", headers=HEADERS).status_code == 202
+            second = client.post("/server/backup", headers=HEADERS)
+            assert second.status_code == 409
+            assert "still running" in second.json()["detail"]
+        finally:
+            for j in list(jobsvc._jobs):
+                if j.state == jobsvc.RUNNING:
+                    j.kill("test teardown")
+            jobsvc.settings = prev
 
     def test_stop_action_when_running(self):
         with patch("api.routes.server._is_running", return_value=True):

@@ -18,7 +18,8 @@ start() {
   rotate_log
   guard_world
 
-  if is_running; then echo "Already running (PID $(cat "${PIDFILE}"))."; exit 0; fi
+  # return, not exit — same trap as stop(): an exit here kills any caller.
+  if is_running; then echo "Already running (PID $(cat "${PIDFILE}"))."; return 0; fi
 
   preflight_check
 
@@ -270,7 +271,11 @@ stop() {
     "${SCRIPT_DIR}/api-manager.sh" stop
   fi
 
-  if ! is_running; then echo "Server is not running."; exit 0; fi
+  # `return`, NOT `exit`. restart() is `stop; sleep 2; start` — an `exit 0`
+  # here terminates the whole script, so restarting a STOPPED server printed
+  # "Server is not running." and never reached start(). The API answered 202
+  # "Restart command accepted" and nothing happened.
+  if ! is_running; then echo "Server is not running."; return 0; fi
   local pid; pid="$(cat "${PIDFILE}")"
   echo "[stop] SIGINT ${pid} (graceful)…"; kill -SIGINT "${pid}" 2>/dev/null || true
   for i in {1..60}; do

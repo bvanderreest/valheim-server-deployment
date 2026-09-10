@@ -326,6 +326,54 @@ p{margin:0}
   .f-ev dd{text-align:left;color:var(--ink);margin-bottom:6px}
 }
 
+/* ---------- job / stages ---------- */
+/* The old .pending block said "Backing up…" and a hardcoded sentence about what
+   it was waiting for. It could not say where the action had got to, because the
+   API discarded the script's output. Now the script's own narration drives it. */
+.jobcard{border:1px solid var(--accent-line);background:var(--surface);border-radius:12px;padding:16px 18px;margin-bottom:20px}
+.jobcard[hidden]{display:none}
+.jobcard[data-state="succeeded"]{border-color:var(--good)}
+.jobcard[data-state="failed"],.jobcard[data-state="killed"]{border-color:var(--danger-line)}
+.job-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.job-head h2{font-size:15.5px}
+.job-head .el{margin-left:auto;font-size:12.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.job-head .jid{font-size:11.5px;color:var(--ink-3);font-family:var(--mono)}
+
+.stages{display:grid;gap:2px}
+.stg{display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:center;padding:5px 0;font-size:13.5px}
+.stg .mk{width:14px;height:14px;border-radius:50%;border:2px solid var(--line-strong);display:inline-flex;align-items:center;justify-content:center;font-size:9px;line-height:1;color:var(--bg);justify-self:center}
+.stg[data-s="done"] .mk{background:var(--good);border-color:var(--good);color:var(--on-fill)}
+.stg[data-s="failed"] .mk{background:var(--danger);border-color:var(--danger);color:var(--on-fill)}
+.stg[data-s="skipped"] .mk{border-style:dashed;opacity:.5}
+.stg[data-s="active"] .mk{border-color:var(--accent-fill);border-right-color:transparent;animation:spin 900ms linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.stg .nm{color:var(--ink-2);min-width:0}
+.stg[data-s="active"] .nm{color:var(--ink);font-weight:600}
+.stg[data-s="done"] .nm{color:var(--ink)}
+.stg[data-s="skipped"] .nm{color:var(--ink-3)}
+.stg .rt{font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums;white-space:nowrap}
+.stg .det{grid-column:2/-1;font-size:12px;color:var(--ink-3);margin-top:-2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stg .bar{grid-column:2/-1;height:4px;border-radius:2px;background:var(--surface-2);overflow:hidden;margin-top:4px}
+.stg .bar i{display:block;height:100%;background:var(--accent-fill);border-radius:2px;transition:width 240ms var(--ease-out)}
+
+.job-out{margin-top:12px}
+.job-out summary{font-size:12.5px;color:var(--ink-2);cursor:pointer;list-style:none;display:inline-flex;gap:6px;align-items:center}
+.job-out summary::-webkit-details-marker{display:none}
+.job-out summary::before{content:"▸";font-size:10px}
+.job-out[open] summary::before{content:"▾"}
+.job-out .box{margin-top:8px;max-height:230px;overflow:auto;background:var(--inset);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:11.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+.job-out .box .e{color:var(--danger)}
+.job-out .box .s{color:var(--accent)}
+.job-result{margin-top:11px;font-size:13.5px;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--line)}
+.job-result[data-ok="1"]{border-color:var(--good);background:var(--good-soft)}
+.job-result[data-ok="0"]{border-color:var(--danger-line);background:var(--danger-soft)}
+.job-result b{display:block;margin-bottom:2px}
+@media (prefers-reduced-motion:reduce){
+  .stg[data-s="active"] .mk{animation:none;border-right-color:var(--accent-fill);border-style:dashed}
+  .stg .bar i{transition:none}
+}
+@media (max-width:560px){ .stg{grid-template-columns:18px 1fr} .stg .rt{grid-column:2/-1;text-align:left} }
+
 /* ---------- difficulty ---------- */
 .strata{display:grid;gap:26px}
 .stratum{display:grid;grid-template-columns:150px 1fr;gap:20px;padding-top:18px;border-top:1px solid var(--line)}
@@ -643,6 +691,13 @@ dialog[open]{animation:dlg 250ms var(--ease-out)}
   </aside>
 
   <main class="work">
+    <div class="jobcard" id="jobcard" hidden role="status" aria-live="polite">
+      <div class="job-head"><h2 id="job-title">Working…</h2><span class="jid" id="job-id"></span><span class="el num" id="job-elapsed"></span></div>
+      <div class="stages" id="job-stages"></div>
+      <div class="job-result" id="job-result" hidden></div>
+      <details class="job-out" id="job-out"><summary>Server output</summary><div class="box" id="job-lines"></div></details>
+    </div>
+
     <!-- ---------- OVERVIEW ---------- -->
     <section class="view" data-view="overview" data-active>
       <div class="view-head"><div><h1>Overview</h1><p>What the server is doing right now, from <span class="mono">/status</span>.</p></div></div>
@@ -1135,6 +1190,7 @@ const mockApi = {
     const m = path.match(/^\/server\/(\w+)$/);
     if (m){
       const a = m[1];
+      var _jobId = 'demo' + Math.random().toString(16).slice(2, 10);
       if (!['start','stop','restart','backup','update'].includes(a)) return { status:422, body:{ detail:`Unknown action '${a}'` } };
       if (S.transition) return { status:409, body:{ detail:`Server is busy with '${S.transition}'` } };
       if (a==='start' && S.running) return { status:409, body:{ detail:'Server is already running' } };
@@ -1146,7 +1202,7 @@ const mockApi = {
       if (a==='restart'){ setTimeout(doStop, 3000); setTimeout(()=>{ doStart(); S.transition=null; }, 10500); }
       if (a==='backup'){ log('World save writing starting'); setTimeout(()=>{ S.lastSave=now(); S.extras.backups++; log(`World saved ( ${(S.extras.save_seconds*1000+Math.random()*80).toFixed(1)}ms )`); log('Backup written: CrowsNest_'+stamp().replace(/[^0-9]/g,'').slice(0,12)+'.db'); S.transition=null; }, 4600); }
       if (a==='update'){ setTimeout(doStop, 3000); setTimeout(()=>log('Updating Valheim dedicated server via SteamCMD'), 4500); setTimeout(()=>{ S.version='l-1.0.0'; log('Update complete: l-1.0.0. Server left stopped.','warn'); S.transition=null; }, 14000); }
-      return { status:202, body:{ accepted:true, action:a } };
+      return { status:202, body:{ accepted:true, action:a, job_id:_jobId } };
     }
     if (path === '/mods/install'){
       const id = String(body.id||'').trim(); if (!id) return { status:422, body:{ detail:'A Thunderstore id or URL is required' } };
@@ -1386,9 +1442,12 @@ document.addEventListener('click', async e => {
 async function fire(a){
   const r = await api.post('/server/'+a, KEY);
   if (r.status === 202){
-    pending = { action:a, startedAt:now(), pidBefore:status.pid, saveBefore:status.last_save, versionBefore:status.version };
+    // `pending` still drives the rail's busy dot and disables the buttons; the
+    // job stream is what actually tells us what is happening and when it ends.
+    pending = { action:a, startedAt:now(), pidBefore:status.pid, saveBefore:status.last_save, versionBefore:status.version, jobId:r.body.job_id };
     log(`Console: ${a} requested`);
     renderPending(); renderStatus(); poll();
+    if (r.body.job_id) followJob(r.body.job_id, a);
   } else if (r.status === 409){ toast(`Not now: ${r.body.detail}.`); poll(); }
   else toast(`The server refused (${r.status}): ${r.body.detail||'unknown error'}.`);
 }
@@ -1408,10 +1467,20 @@ function checkPending(){
   if (p.action === 'restart' && s.running && s.pid && s.pid !== p.pidBefore) done = `Restarted — new pid ${s.pid}. Join code is now ${s.connection.join_code}.`;
   if (p.action === 'backup' && s.last_save !== p.saveBefore) done = `Backed up. Save took ${S.extras.save_seconds} s.`;
   if (p.action === 'update' && !s.running && s.version !== p.versionBefore) done = `Updated to ${s.version}. The server is stopped — start it when you're ready.`;
+  // BUG THIS REPLACES: backup keyed off last_save moving, which a backup does
+  // not move — so a 21-second backup sat here until the give-up fired, or an
+  // unrelated autosave was miscredited to it. The job's `end` event is now the
+  // authority, and a backup no longer has a /status proxy at all.
+  if (p.action === 'backup') done = null;
   if (done){ pending = null; renderPending(); renderStatus(); toast(done, 7000); return; }
-  if (now() - p.startedAt > 120000){
+
+  // The give-up is now a stream backstop, not a verdict on the action. It must
+  // outlast a real update — a world migration alone may take 900s — so it only
+  // fires when we have NO job stream to tell us otherwise.
+  const noStream = !p.jobId || JOB.id !== p.jobId;
+  if (noStream && now() - p.startedAt > 120000){
     pending = null; renderPending(); renderStatus();
-    toast(`Nothing confirmed the ${p.action} within 2 minutes. /status still shows ${s.running?'running':'stopped'}${s.pid?` on pid ${s.pid}`:''}. Check the logs before trying again.`, 12000);
+    toast(`No progress stream for the ${p.action}, and nothing in /status confirmed it within 2 minutes. It may still be running — check the Logs view.`, 12000);
   }
 }
 /* update: hold-to-confirm */
@@ -1445,6 +1514,275 @@ function renderOverview(){
   $('#o-rules').innerHTML = parts.join('<br>');
 }
 const kv = rows => rows.map(([k,v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('');
+
+/* ── Mock job runs ────────────────────────────────────────────────────────────
+   The demo has no server to stream from. These are scripted TRANSCRIPTS, taken
+   from the real 1.0 update on Lowood-AU — data, not a second implementation of
+   the parser. The mock advances stages with the same rule the server uses
+   (entering a stage closes the earlier ones) and nothing else, so what you see
+   here is rendered by exactly the code that renders the live run. */
+const MOCK_JOB_SCRIPT = {
+  backup: { stages:[['read','Reading world'],['archive','Archiving'],['verify','Verifying']], steps:[
+    [200,  'read',    '[backup] Creating backup for world: CrowsNest'],
+    [400,  null,      '[backup] Layout: flat'],
+    [500,  'archive', '[backup] Creating /srv/valheim/backups/world-CrowsNest-2026-09-10_01-10-02.tar.gz…'],
+    [2600, 'verify',  '[backup] OK — 140M, integrity verified.'],
+  ]},
+  stop: { stages:[['signal','Signalling server'],['wait','Waiting for exit'],['stopped','Stopped']], steps:[
+    [200,  'signal',  '[stop] SIGINT 49752 (graceful)…'],
+    [1400, null,      'Input System module state changed to: ShutdownInProgress.'],
+    [2600, 'stopped', '[stop] Stopped.'],
+  ]},
+  start: { stages:[['rotate','Rotating log'],['guard','Checking world'],['preflight','Pre-flight'],['launch','Launching'],['world','Loading world'],['network','Connecting'],['ready','Ready']], steps:[
+    [200,  'rotate',    '[rotate_log] Previous log archived to /srv/valheim/logs/valheim-server-2026-09-10_01-17-00.log'],
+    [500,  'guard',     '[guard] Chunked (1.0) save layout detected — world present, no action.'],
+    [800,  'preflight', '[preflight] Checking shared library dependencies...'],
+    [1400, null,        '[preflight] All library checks passed.'],
+    [1800, 'launch',    'Valheim Server Starting'],
+    [2600, null,        'Valheim version: l-1.0.7 (network version 39)'],
+    [3400, 'world',     'Load world: CrowsNest'],
+    [5200, 'network',   'Game server connected'],
+    [6400, 'ready',     'Status:      Started'],
+  ]},
+  update: { stages:[['stop','Stopping server'],['backup','Pre-update backup'],['steam','Checking Steam'],['download','Downloading'],['verify','Verifying install'],['install','Installing'],['restart','Restarting server'],['done','Done']], steps:[
+    [200,  'stop',     '[update] Stopping…'],
+    [1200, 'backup',   '[update] Taking a pre-update backup…'],
+    [1500, null,       '[backup] Creating /srv/valheim/backups/world-CrowsNest-2026-09-10_01-10-02.tar.gz…'],
+    [3400, null,       '[backup] OK — 140M, integrity verified.'],
+    [3800, 'steam',    '[update] Checking Steam connectivity via api.steamcmd.net...'],
+    [4300, null,       '[update] Steam connectivity OK — app 896660 is reachable.'],
+    [4600, null,       '[update] Installed build before: 21981590'],
+    [5000, 'download', ' Update state (0x11) preallocating, progress: 10.95 (217985206 / 1990561517)'],
+    [5600, null,       ' Update state (0x61) downloading, progress: 22.67 (451285815 / 1990561517)'],
+    [6200, null,       ' Update state (0x61) downloading, progress: 59.37 (1181778972 / 1990561517)'],
+    [6800, null,       ' Update state (0x61) downloading, progress: 89.85 (1788570278 / 1990561517)'],
+    [7400, 'verify',   ' Update state (0x81) verifying update, progress: 17.24 (343073346 / 1990561517)'],
+    [8000, null,       ' Update state (0x81) verifying update, progress: 90.25 (1796549615 / 1990561517)'],
+    [8600, 'install',  ' Update state (0x101) committing, progress: 100.00 (1990561517 / 1990561517)'],
+    [9000, null,       "Success! App '896660' fully installed."],
+    [9300, null,       '[update] Build changed 21981590 → 25185644.'],
+    [9700, 'restart',  '[update] Restarting server (it was running before the update)…'],
+    [11500, 'done',    '[update] Done.'],
+  ]},
+};
+MOCK_JOB_SCRIPT.restart = {
+  stages: MOCK_JOB_SCRIPT.stop.stages.concat(MOCK_JOB_SCRIPT.start.stages),
+  steps: MOCK_JOB_SCRIPT.stop.steps.concat(
+    MOCK_JOB_SCRIPT.start.steps.map(([t,k,l]) => [t + 2800, k, l])),
+};
+
+function mockFollowJob(jobId, action){
+  const spec = MOCK_JOB_SCRIPT[action] || MOCK_JOB_SCRIPT.backup;
+  jobReset();
+  JOB.id = jobId; JOB.action = action; JOB.startedAt = now()/1000; JOB.state = 'running';
+  JOB.stages = spec.stages.map(([key,label]) => ({ key, label, state:'pending', started_at:null, ended_at:null, detail:null, percent:null }));
+  renderJob();
+  const t0 = now()/1000;
+  const timers = [];
+  const enter = (key, at) => {
+    const i = JOB.stages.findIndex(s => s.key === key);
+    if (i < 0) return;
+    JOB.stages.forEach((s, n) => {
+      if (n < i && s.state === 'active'){ s.state = 'done'; s.ended_at = at; }
+      else if (n < i && s.state === 'pending'){ s.state = 'skipped'; }
+    });
+    if (JOB.stages[i].state === 'pending'){ JOB.stages[i].state = 'active'; JOB.stages[i].started_at = at; }
+  };
+  spec.steps.forEach(([delay, key, line]) => {
+    timers.push(setTimeout(() => {
+      const at = now()/1000;
+      if (key) enter(key, at);
+      JOB.lines.push(line);
+      const act = JOB.stages.find(s => s.state === 'active');
+      if (act){
+        const m = line.match(/progress: ([0-9.]+)/);
+        if (m) act.percent = parseFloat(m[1]);
+        const d = line.match(/^\[[a-z_]+\]\s+(.*)$/);
+        if (d) act.detail = d[1].slice(0,160);
+      }
+      renderJob();
+    }, delay));
+  });
+  const last = spec.steps[spec.steps.length - 1][0];
+  timers.push(setTimeout(() => {
+    const at = now()/1000;
+    JOB.stages.forEach(s => { if (s.state === 'active'){ s.state = 'done'; s.ended_at = at; } else if (s.state === 'pending'){ s.state = 'skipped'; } });
+    if (action === 'update'){ S.version = 'l-1.0.7 (network version 39)'; }
+    jobFinished({ id:jobId, action, state:'succeeded', started_at:t0, ended_at:at,
+                  exit_code:0, error:null, line_count:JOB.lines.length, stages:JOB.stages });
+  }, last + 700));
+  JOB.ctrl = { abort(){ timers.forEach(clearTimeout); } };
+}
+
+/* ===================== JOBS / STAGES =====================
+   An action used to be a black box: POST returned 202 and the console then
+   GUESSED at completion by diffing /status. That guess was wrong for backup —
+   it waited for `last_save` to move, which a backup never moves, so a backup
+   that finished in 21 seconds sat on "Backing up…" until a 2-minute give-up
+   fired or an unrelated autosave was miscredited to it.
+
+   Now the API returns a job_id and streams the script's own output. Completion
+   is the job's `end` event: a fact, not an inference.
+
+   EventSource cannot set headers and the API takes the key only as X-API-Key,
+   so this reads the SSE body with fetch + a stream reader instead. */
+const JOB = { id:null, ctrl:null, stages:[], lines:[], startedAt:0, state:null, action:null };
+
+const ACTION_TITLE = {
+  start:'Starting the server', stop:'Stopping the server', restart:'Restarting the server',
+  backup:'Backing up the world', update:'Updating the server',
+};
+
+function jobReset(){
+  if (JOB.ctrl){ try { JOB.ctrl.abort(); } catch {} }
+  JOB.ctrl = null; JOB.id = null; JOB.stages = []; JOB.lines = []; JOB.state = null; JOB.action = null;
+  $('#jobcard').hidden = true;
+  $('#job-result').hidden = true;
+  $('#job-out').removeAttribute('open');
+}
+
+function fmtSecs(s){ return s < 60 ? `${s}s` : `${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s`; }
+
+function renderJob(){
+  const card = $('#jobcard');
+  if (!JOB.id){ card.hidden = true; return; }
+  card.hidden = false;
+  card.dataset.state = JOB.state || 'running';
+  $('#job-title').textContent = ACTION_TITLE[JOB.action] || JOB.action || 'Working…';
+  $('#job-id').textContent = JOB.id;
+
+  $('#job-stages').innerHTML = JOB.stages.map(s => {
+    const glyph = s.state === 'done' ? '✓' : s.state === 'failed' ? '✕' : '';
+    const secs = (s.started_at && s.ended_at) ? Math.round(s.ended_at - s.started_at)
+               : (s.started_at && s.state === 'active') ? Math.round(now()/1000 - s.started_at) : null;
+    const pct = (s.state === 'active' && typeof s.percent === 'number');
+    return `<div class="stg" data-s="${esc(s.state)}">`
+      + `<span class="mk" aria-hidden="true">${glyph}</span>`
+      + `<span class="nm">${esc(s.label)}</span>`
+      + `<span class="rt">${s.state === 'skipped' ? 'not reached'
+            : [pct ? Math.round(s.percent) + '%' : '', secs !== null ? fmtSecs(secs) : ''].filter(Boolean).join(' · ')}</span>`
+      + (s.detail && s.state === 'active' ? `<span class="det">${esc(s.detail)}</span>` : '')
+      + (pct ? `<span class="bar"><i style="width:${s.percent.toFixed(1)}%"></i></span>` : '')
+      + `</div>`;
+  }).join('');
+
+  const box = $('#job-lines');
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 30;
+  box.innerHTML = JOB.lines.slice(-400).map(l => {
+    const cls = /ERROR|FAILED|ABORTING|\bError\b/.test(l) ? 'e' : /^\[|Success!/.test(l) ? 's' : '';
+    return `<span class="${cls}">${esc(l)}</span>`;
+  }).join('\n');
+  if (atBottom) box.scrollTop = box.scrollHeight;
+
+  const el = $('#job-elapsed');
+  if (JOB.startedAt) el.textContent = fmtSecs(Math.max(0, Math.round(now()/1000 - JOB.startedAt)));
+}
+
+function jobFinished(summary){
+  JOB.state = summary.state;
+  JOB.stages = summary.stages || JOB.stages;
+  const ok = summary.state === 'succeeded';
+  const r = $('#job-result');
+  r.hidden = false;
+  r.dataset.ok = ok ? '1' : '0';
+  const took = summary.ended_at && summary.started_at ? fmtSecs(Math.round(summary.ended_at - summary.started_at)) : '';
+  if (ok){
+    r.innerHTML = `<b>${esc(ACTION_TITLE[summary.action] || summary.action)} finished${took ? ' in ' + esc(took) : ''}.</b>`
+      + esc(jobOutcomeLine(summary));
+  } else {
+    // Say WHICH stage failed. "It failed" sends someone to read 400 lines.
+    const bad = (summary.stages || []).find(s => s.state === 'failed');
+    r.innerHTML = `<b>${esc(ACTION_TITLE[summary.action] || summary.action)} failed${took ? ' after ' + esc(took) : ''}.</b>`
+      + (bad ? `Stopped during <b>${esc(bad.label)}</b>${bad.detail ? ' — ' + esc(bad.detail) : ''}. ` : '')
+      + (summary.exit_code !== null && summary.exit_code !== undefined ? `Exit code ${esc(String(summary.exit_code))}. ` : '')
+      + (summary.error ? esc(summary.error) + ' ' : '')
+      + `The server output is below.`;
+    $('#job-out').setAttribute('open','');
+  }
+  // Release the rail: the buttons are disabled while `pending` is set, and the
+  // job ending is the real signal that the action is over.
+  pending = null;
+  renderJob();
+  renderStatus();
+  poll();
+}
+function jobOutcomeLine(s){
+  if (s.action === 'backup') return ' The archive was written and its integrity verified.';
+  if (s.action === 'update') return ' Check the version on the left; start the server if it is stopped.';
+  if (s.action === 'stop')   return ' The world was saved before exit.';
+  return ' ';
+}
+
+/* Read an SSE body through fetch, because EventSource cannot send X-API-Key. */
+async function followJob(jobId, action){
+  if (!LIVE) return mockFollowJob(jobId, action);
+  jobReset();
+  JOB.id = jobId; JOB.action = action; JOB.startedAt = now()/1000; JOB.state = 'running';
+  renderJob();
+  const ctrl = new AbortController(); JOB.ctrl = ctrl;
+  let res;
+  try {
+    res = await fetch(`${API_BASE}/jobs/${encodeURIComponent(jobId)}/stream`,
+                      { headers: { 'X-API-Key': KEY }, signal: ctrl.signal });
+  } catch (e) {
+    // The action is still running on the server; only our view of it is gone.
+    $('#job-result').hidden = false; $('#job-result').dataset.ok = '0';
+    $('#job-result').innerHTML = `<b>Lost the progress stream.</b>The action is still running on the server — this console just cannot see it. Watch the Logs view, or reload.`;
+    return;
+  }
+  if (!res.ok || !res.body){ return; }
+
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  try {
+    while (true){
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream:true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) !== -1){
+        const frame = buf.slice(0, i); buf = buf.slice(i + 2);
+        if (!frame || frame.startsWith(':')) continue;   // keepalive comment
+        let ev = 'message', data = '';
+        for (const line of frame.split('\n')){
+          if (line.startsWith('event:')) ev = line.slice(6).trim();
+          else if (line.startsWith('data:')) data += line.slice(5).trim();
+        }
+        if (!data) continue;
+        let p; try { p = JSON.parse(data); } catch { continue; }
+        if (ev === 'snapshot'){
+          JOB.lines = p.lines || []; JOB.stages = p.stages || [];
+          JOB.startedAt = p.started_at || JOB.startedAt; JOB.action = p.action || JOB.action;
+          if (p.state && p.state !== 'running') { jobFinished(p); return; }
+          renderJob();
+        } else if (ev === 'line'){
+          JOB.lines.push(p.line); if (p.stages) JOB.stages = p.stages;
+          renderJob();
+        } else if (ev === 'end'){
+          jobFinished(p.job || p); return;
+        }
+      }
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError'){
+      $('#job-result').hidden = false; $('#job-result').dataset.ok = '0';
+      $('#job-result').innerHTML = `<b>The progress stream dropped.</b>The action may still be running. Reload to pick it back up.`;
+    }
+  }
+}
+
+// Tick the elapsed counters while a job runs.
+setInterval(() => { if (JOB.id && JOB.state === 'running') renderJob(); }, 1000);
+
+/* On load, re-attach to anything already in flight — a reload used to lose the
+   action entirely, leaving the console idle while an update ran on. */
+async function resumeJob(){
+  const r = await api.get('/jobs?limit=1', KEY);
+  if (r.status !== 200) return;
+  const j = (r.body.jobs || [])[0];
+  if (j && j.state === 'running') followJob(j.id, j.action);
+}
 
 /* ===================== PERFORMANCE =====================
    /metrics reports the LAST stall. That is a snapshot, and a snapshot cannot
@@ -2127,6 +2465,7 @@ async function startApp(firstStatus){
   loadUpdates();  // build check runs once on entry, then on demand
   status = firstStatus; renderStatus();
   await Promise.all([loadModifiers(), loadConfig(), loadLogs(), loadMods(), loadPerf()]);
+  resumeJob();  // a reload used to abandon a running update entirely
   poll();
 }
 boot();

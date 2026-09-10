@@ -119,5 +119,77 @@ else
 fi
 rm -rf "$T"
 
+# ─────────────────────────────────────────────────────────────────────────────
+# config.conf must survive `set -u`
+#
+# Three scripts source config.conf and TWO of them run `set -euo pipefail`.
+# STEAMCLIENT_SO is not in .env, so config.conf:83 aborted them at source time:
+# backup-automation.sh died on every invocation and systemd restarted it 5,884
+# times without one backup ever running. Nothing caught it because nothing ever
+# sourced config.conf the way those scripts do.
+# ─────────────────────────────────────────────────────────────────────────────
+echo
+echo "TEST 12: config.conf sources cleanly under set -euo pipefail"
+CFG_OUT="$( env -u STEAMCLIENT_SO -u LD_LIBRARY_PATH -u STEAMCMD_BIN -u SERVER_DIR \
+            bash -c 'set -euo pipefail; source "'"$REPO"'/config.conf" >/dev/null 2>&1; echo SOURCED_OK' 2>&1 )"
+if [[ "$CFG_OUT" == *SOURCED_OK* ]]; then
+  ok "config.conf survives set -u with every optional var unset"
+else
+  no "config.conf aborts under set -u — this is what killed backup-automation.sh"
+  echo "      $CFG_OUT"
+fi
+
+echo
+echo "TEST 13: no read-before-assign left unguarded in config.conf"
+# Only two shapes actually abort under set -u, and a use AFTER assignment is
+# fine — so match the shapes, not every mention:
+#   1. an emptiness guard on a var that may never have been set:  [[ -z "${VAR}" ]]
+#   2. a self-referencing append:                        VAR="${VAR}:more"
+UNGUARDED="$(grep -nE '\[\[ +(! +)?-[znx] +"\$\{[A-Z_]+\}"' "$REPO/config.conf" | grep -v ':-' || true)"
+UNGUARDED="$UNGUARDED$(grep -nE '^\s*(export +)?([A-Z_]+)=.*\$\{\2\}' "$REPO/config.conf" | grep -v ':-' || true)"
+if [[ -z "$UNGUARDED" ]]; then
+  ok "every optional var is :- guarded where it is tested"
+else
+  no "unguarded reads remain — they will abort a set -u caller"
+  echo "$UNGUARDED" | sed 's/^/      /'
+fi
+
+# ─────────────────────────────────────────────────────────────────────────────
+# restart on a STOPPED server must actually start it
+#
+# stop() used `exit 0` rather than `return 0` on the not-running path. Since
+# restart() is `stop; sleep 2; start`, the exit killed the whole script and
+# start() never ran — while the API happily answered 202 "Restart accepted".
+# ─────────────────────────────────────────────────────────────────────────────
+echo
+echo "TEST 14: stop()/start() no-op paths return, they do not exit"
+BAD="$(grep -nE 'echo "(Server is not running|Already running)[^"]*"[^;]*; *exit ' "$REPO/valheim-server-manager.sh" || true)"
+if [[ -z "$BAD" ]]; then
+  ok "no-op paths use return — restart() can reach start()"
+else
+  no "an exit on a no-op path will truncate any caller (restart, update)"
+  echo "$BAD" | sed 's/^/      /'
+fi
+
+echo
+echo "TEST 15: the REAL stop() lets restart() reach start()"
+setup
+# Eval the shipped function bodies — a stubbed stop() would prove nothing about
+# the file we actually deploy. The manager dispatches on "$1" at the bottom, so
+# it cannot simply be sourced.
+STOP_BODY="$(sed -n '/^stop() {/,/^}/p' "$REPO/valheim-server-manager.sh")"
+RESTART_OUT="$( ( set -eo pipefail; set +e
+  SCRIPT_DIR="$REPO"
+  is_running(){ return 1; }
+  start(){ echo "START_WAS_REACHED"; return 0; }
+  eval "$STOP_BODY"
+  restart(){ stop; start; }
+  restart ) 2>&1 )"
+if [[ "$RESTART_OUT" == *START_WAS_REACHED* ]]; then
+  ok "the shipped stop() returns, so restart reaches start"
+else
+  no "the shipped stop() truncated restart before start"; echo "      $RESTART_OUT"
+fi
+
 echo; echo "  ── $PASS passed, $FAIL failed ──"
 [[ $FAIL -eq 0 ]]

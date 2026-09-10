@@ -57,6 +57,9 @@ class ActionResponse(BaseModel):
     action: str
     accepted: bool
     message: str
+    # Follow it at /v1/jobs/{job_id}/stream. Optional so the field can be absent
+    # rather than a lie if an action is ever handled without a job.
+    job_id: Optional[str] = None
 
 
 class LogsResponse(BaseModel):
@@ -197,3 +200,36 @@ class PerformanceResponse(BaseModel):
     context: StallContext
     findings: list[Finding] = []
     log_files_read: int = 1
+
+
+class JobStage(BaseModel):
+    key: str
+    label: str
+    state: str  # pending | active | done | failed | skipped
+    started_at: Optional[float] = None
+    ended_at: Optional[float] = None
+    detail: Optional[str] = None
+    percent: Optional[float] = None
+
+
+class JobSummary(BaseModel):
+    id: str
+    action: str
+    state: str  # running | succeeded | failed | killed
+    started_at: float
+    ended_at: Optional[float] = None
+    exit_code: Optional[int] = None
+    error: Optional[str] = None
+    line_count: int
+    stages: list[JobStage] = []
+
+
+class JobDetail(JobSummary):
+    lines: list[str] = []
+    # True when the line cap dropped earlier output — so the console can say
+    # "earlier lines dropped" rather than implying it has the whole run.
+    truncated: bool = False
+
+
+class JobList(BaseModel):
+    jobs: list[JobSummary] = []
