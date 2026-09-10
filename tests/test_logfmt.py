@@ -92,3 +92,25 @@ def test_metrics_reports_the_same_save_from_a_1_0_log(tmp_path, monkeypatch):
     assert met._stall_metrics()["save_duration_seconds"] == pytest.approx(0.124)
     # -1 is this module's "never observed"; a real age is a positive number
     assert met._last_save_age_seconds() > 0
+
+
+def test_metrics_reports_the_freeze_from_a_1_0_log(tmp_path, monkeypatch):
+    """valheim_save_stall_seconds is the gauge for the freeze players feel, and
+    it read -1 on every 1.0 server: BOTH halves of the blocking work were
+    renamed and metrics.py still matched the 0.221 spellings.
+
+      0.221   PrepareSave: clone done in 12ms
+              ZDOExtraData.PrepareSave done in 240 ms
+      1.0     GetSaveClonePerChunk. ... to save: 0 [4ms]
+              PrepareSave: ZDOExtraData.PrepareSave done [327ms]
+    """
+    log = tmp_path / "valheim-server.log"
+    log.write_text("\n".join(LIVE_1_0) + "\n")
+    from api.routes import metrics as met
+    monkeypatch.setattr(met.settings, "_logfile", log, raising=False)
+
+    st = met._stall_metrics()
+    # 3ms clone + 264ms ZDO prepare, from the verbatim lines above
+    assert st["save_stall_seconds"] == pytest.approx(0.267), \
+        "the blocking part of a 1.0 save is still not being measured"
+    assert st["save_stall_seconds"] > 0

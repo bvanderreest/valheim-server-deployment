@@ -47,8 +47,12 @@ router = APIRouter(tags=["metrics"])
 # player's network — which is the question a geographically spread group always
 # ends up asking.
 
-_RE_SAVE_CLONE = re.compile(r"PrepareSave: clone done in (\d+)ms")
-_RE_SAVE_ZDO = re.compile(r"ZDOExtraData\.PrepareSave done in (\d+) ?ms")
+# 0.221 only. 1.0 renamed BOTH halves of the blocking work, so these matched
+# nothing and valheim_save_stall_seconds — the freeze players actually feel —
+# sat at its never-observed sentinel on every 1.0 server. logfmt carries both
+# forms; that is what it exists for.
+_RE_SAVE_CLONE = logfmt.RE_PREPARE_CLONE
+_RE_SAVE_ZDO = logfmt.RE_PREPARE_ZDO
 _RE_GC_TOTAL = re.compile(r"^Total: ([0-9.]+) ms \(FindLiveObjects")
 _RE_LOADED = re.compile(r"Loaded Objects now: (\d+)")
 _RE_CONN = re.compile(r"Connections (\d+) ZDOS:(\d+)\s+sent:(\d+) recv:(\d+)")
@@ -75,10 +79,10 @@ def _stall_metrics() -> dict[str, float]:
     }
     clone = zdo = None
     for line in _tail_lines():
-        if (m := _RE_SAVE_CLONE.search(line)):
-            clone = int(m.group(1))
-        elif (m := _RE_SAVE_ZDO.search(line)):
-            zdo = int(m.group(1))
+        if (ms := logfmt.prepare_ms(_RE_SAVE_CLONE, line)) is not None:
+            clone = ms
+        elif (ms := logfmt.prepare_ms(_RE_SAVE_ZDO, line)) is not None:
+            zdo = ms
             if clone is not None:
                 # Both halves of one PrepareSave; this is the frozen window.
                 out["save_stall_seconds"] = (clone + zdo) / 1000

@@ -89,10 +89,32 @@ RE_DISK = re.compile(
 RE_SAVE_STAGE = re.compile(
     r"World save \((\d)/5\) (.+?) \[\s*([0-9.]+)\s*ms\s*\]"
     r"(?:\s*=> Save number (\d+))?")
-RE_PREPARE_ZDO = re.compile(r"PrepareSave: ZDOExtraData\.PrepareSave done \[\s*(\d+)\s*ms\s*\]")
+# The BLOCKING halves of a save — the part that freezes the world. Both builds,
+# because a 0.221 archive is still worth reading and because metrics.py had a
+# 0.221-only copy that silently reported "never observed" on every 1.0 server.
+RE_PREPARE_ZDO = re.compile(
+    r"ZDOExtraData\.PrepareSave done (?:in\s*)?\[?\s*(\d+)\s*ms\s*\]?")
+RE_PREPARE_CLONE = re.compile(
+    r"PrepareSave: clone done in (\d+)\s*ms"                    # 0.221
+    r"|GetSaveClonePerChunk\..*?\[\s*(\d+)\s*ms\s*\]")        # 1.0
+# 1.0 only, and richer: it also carries the chunk counts.
 RE_PREPARE_CHUNKS = re.compile(
     r"GetSaveClonePerChunk\..*?actual chunk files: (\d+)\s+"
     r"Number of dirty chunks to save: (\d+) \[\s*(\d+)\s*ms\s*\]")
+
+
+def prepare_ms(rx: re.Pattern, line: str) -> int | None:
+    """First non-empty group as an int, for the multi-alternative patterns."""
+    m = rx.search(line)
+    if not m:
+        return None
+    for g in m.groups():
+        if g:
+            try:
+                return int(g)
+            except ValueError:
+                return None
+    return None
 
 # Join-code lifecycle. A retry loop here means nobody can connect by code even
 # though the server is up and perfectly healthy.

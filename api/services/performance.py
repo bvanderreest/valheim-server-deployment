@@ -64,13 +64,10 @@ _RE_TS = re.compile(r"^(\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2}):")
 # 1.0 also went chunked — the clone cost is now per-chunk — so the two builds'
 # numbers describe different work. The stall is still clone + ZDOExtraData on
 # both, which is what a player feels either way.
-_RE_SAVE_CLONE = re.compile(
-    r"PrepareSave: clone done in (\d+)\s*ms"          # 0.221
-    r"|GetSaveClonePerChunk\..*?\[(\d+)\s*ms\]"       # 1.0
-)
-_RE_SAVE_ZDO = re.compile(
-    r"ZDOExtraData\.PrepareSave done (?:in\s*)?\[?(\d+)\s*ms\]?"
-)
+# Both from logfmt — a second copy here is how metrics.py came to be a build
+# behind without anyone noticing.
+_RE_SAVE_CLONE = logfmt.RE_PREPARE_CLONE
+_RE_SAVE_ZDO = logfmt.RE_PREPARE_ZDO
 _RE_UNLOAD = re.compile(r"Loaded Objects now: (\d+)")
 _RE_GC_TOTAL = re.compile(r"^Total: ([0-9.]+) ms \(FindLiveObjects")
 _RE_CONN = re.compile(r"Connections (\d+) ZDOS:(\d+)\s+sent:(\d+) recv:(\d+)")
